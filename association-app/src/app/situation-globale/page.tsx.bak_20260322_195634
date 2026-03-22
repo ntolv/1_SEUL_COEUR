@@ -1,0 +1,151 @@
+﻿"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+type LigneGlobale = {
+  type_personne: string;
+  personne_id: string;
+  nom_complet: string;
+  email: string | null;
+  telephone: string | null;
+  total_attendu: number | null;
+  total_encaisse: number | null;
+  total_retard: number | null;
+};
+
+function euro(v: number | null | undefined) {
+  const n = Number(v ?? 0);
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+  }).format(n);
+}
+
+export default function SituationGlobalePage() {
+  const [rows, setRows] = useState<LigneGlobale[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function charger() {
+    setLoading(true);
+    setError(null);
+
+    const { data, error } = await supabase
+      .from("v_encaissements_hybrides_suivi")
+      .select("*")
+      .order("nom_complet", { ascending: true });
+
+    if (error) {
+      setError(error.message);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    setRows((data ?? []) as LigneGlobale[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    charger();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+
+    return rows.filter((r) =>
+      [
+        r.nom_complet ?? "",
+        r.email ?? "",
+        r.telephone ?? "",
+        r.type_personne ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [rows, search]);
+
+  return (
+    <AppShell>
+      <div className="space-y-6 p-6">
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.28)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.22em] text-cyan-300/70">
+                Situation membres
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold text-white">
+                Situation hybride membres + préinscrits
+              </h1>
+              <p className="mt-2 text-sm text-slate-300">
+                Les préinscrits apparaissent aussi dans cette page.
+              </p>
+            </div>
+
+            <div className="w-full lg:w-[360px]">
+              <label className="mb-2 block text-sm text-slate-300">Recherche</label>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Nom, email, téléphone..."
+                className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+              Chargement...
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-red-900/40 bg-red-950/30 px-4 py-6 text-red-200">
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+              Aucune donnée.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-cyan-900/40 text-left text-cyan-200">
+                    <th className="px-3 py-3">Type</th>
+                    <th className="px-3 py-3">Nom</th>
+                    <th className="px-3 py-3">Téléphone</th>
+                    <th className="px-3 py-3">Total attendu</th>
+                    <th className="px-3 py-3">Total encaissé</th>
+                    <th className="px-3 py-3">Retard</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((row) => (
+                    <tr
+                      key={`${row.type_personne}-${row.personne_id}`}
+                      className="border-b border-slate-800 text-slate-200"
+                    >
+                      <td className="px-3 py-3">{row.type_personne}</td>
+                      <td className="px-3 py-3 font-medium text-white">{row.nom_complet}</td>
+                      <td className="px-3 py-3">{row.telephone ?? "-"}</td>
+                      <td className="px-3 py-3">{euro(row.total_attendu)}</td>
+                      <td className="px-3 py-3">{euro(row.total_encaisse)}</td>
+                      <td className="px-3 py-3">{euro(row.total_retard)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </AppShell>
+  );
+}

@@ -62,7 +62,7 @@ function euro(v: number | null | undefined) {
 }
 
 function normalizeName(value: string) {
-  return (value ?? "").trim().toLowerCase();
+  return value.trim().toLowerCase();
 }
 
 export default function EncaissementsPage() {
@@ -98,12 +98,13 @@ export default function EncaissementsPage() {
     const row = Array.isArray(data) ? data[0] : data;
     if (!row?.id) throw new Error("Session du mois introuvable.");
     setSession(row as SessionRow);
+    return row as SessionRow;
   }
 
   async function chargerPersonnes() {
     const [{ data: membres, error: errM }, { data: preinscrits, error: errP }] = await Promise.all([
       supabase.from("membres").select("id, nom_complet, telephone"),
-      supabase.from("membres_preinscriptions").select("id, nom_complet, telephone"),
+      supabase.from("preinscrits").select("id, nom_complet, telephone"),
     ]);
 
     if (errM) throw new Error(errM.message);
