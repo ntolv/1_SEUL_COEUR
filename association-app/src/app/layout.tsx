@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   title: "UN SEUL COEUR",
   description: "Application Association",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
