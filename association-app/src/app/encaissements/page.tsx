@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
@@ -260,32 +260,26 @@ export default function EncaissementsPage() {
         return;
       }
 
-      const payload = {
+            const rpcPayload = {
         p_session_id: session.id,
+        p_membre_id:
+          selectedPersonne.type_personne === "MEMBRE"
+            ? selectedPersonne.id
+            : null,
+        p_preinscrit_id:
+          selectedPersonne.type_personne === "PREINSCRIT"
+            ? selectedPersonne.id
+            : null,
         p_mode_paiement: "ESPECES",
-        p_reference_paiement: null,
+        p_reference: null,
         p_commentaire: "Encaissement du mois",
-        p_ventilations: ventilations,
+        p_ventilations: ventilations.map((v) => ({
+          rubrique: v.rubrique_nom,
+          montant: v.montant,
+        })),
       };
 
-      let rpcName = "";
-      let rpcPayload: any = {};
-
-      if (selectedPersonne.type_personne === "MEMBRE") {
-        rpcName = "fn_enregistrer_encaissement_multi";
-        rpcPayload = {
-          ...payload,
-          p_membre_id: selectedPersonne.id,
-        };
-      } else {
-        rpcName = "fn_enregistrer_encaissement_multi_preinscrit";
-        rpcPayload = {
-          ...payload,
-          p_preinscrit_id: selectedPersonne.id,
-        };
-      }
-
-      const { data, error } = await supabase.rpc(rpcName, rpcPayload);
+      const { data, error } = await supabase.rpc("fn_encaisser", rpcPayload);
 
       if (error) throw new Error(error.message);
 
@@ -492,3 +486,4 @@ export default function EncaissementsPage() {
     </AppShell>
   );
 }
+
