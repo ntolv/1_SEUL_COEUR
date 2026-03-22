@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "UN SEUL COEUR",
   description: "Application de gestion de l'association UN SEUL COEUR",
   manifest: "/manifest.webmanifest",
@@ -19,6 +23,7 @@ export const metadata: Metadata = {
     title: "UN SEUL COEUR",
     description: "Application de gestion de l'association UN SEUL COEUR",
     siteName: "UN SEUL COEUR",
+    url: "/",
     images: [
       {
         url: "/usc-og.png",
