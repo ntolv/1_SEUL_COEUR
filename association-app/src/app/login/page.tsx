@@ -89,6 +89,12 @@ export default function LoginPage() {
             {chargement ? "Connexion..." : "Se connecter"}
           </button>
         </form>
+<div className="mt-4 text-center">
+  <a href="/premiere-connexion" className="text-blue-600 underline">
+    Première connexion
+  </a>
+</div>
+
       </div>
     </main>
   );
