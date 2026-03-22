@@ -1,0 +1,7 @@
+{
+  "name": "usc-vercel-root",
+  "private": true,
+  "scripts": {
+    "vercel-build": "cd association-app && npm install && npm run build"
+  }
+}
