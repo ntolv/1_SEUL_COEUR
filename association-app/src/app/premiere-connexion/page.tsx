@@ -58,14 +58,10 @@ export default function PremiereConnexionPage() {
     try {
       const { data, error } = await supabase.rpc(
         "fn_membre_premiere_connexion_init",
-        {
-          p_telephone: normalizePhone(telephone),
-        }
+        { p_telephone: normalizePhone(telephone) }
       );
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
 
       const res: InitResult | undefined = Array.isArray(data) ? data[0] : data;
 
@@ -88,11 +84,7 @@ export default function PremiereConnexionPage() {
       });
 
       setStep(2);
-      setMessage(
-        res.email_masque
-          ? `${res.message} Email déjà connu : ${res.email_masque}`
-          : "Numéro reconnu. Saisissez maintenant votre email et votre mot de passe."
-      );
+      setMessage("Numéro reconnu. Renseigne maintenant ton email et ton mot de passe.");
     } catch (e: any) {
       setMessage(e?.message || "Erreur lors de la vérification du téléphone.");
     } finally {
@@ -119,12 +111,7 @@ export default function PremiereConnexionPage() {
         return;
       }
 
-      if (!finalPassword) {
-        setMessage("Saisis un mot de passe.");
-        return;
-      }
-
-      if (finalPassword.length < 8) {
+      if (!finalPassword || finalPassword.length < 8) {
         setMessage("Le mot de passe doit contenir au moins 8 caractères.");
         return;
       }
@@ -140,18 +127,14 @@ export default function PremiereConnexionPage() {
           .update({ email: finalEmail })
           .eq("id", personne.id);
 
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        if (updateError) throw new Error(updateError.message);
       } else {
         const { error: updateError } = await supabase
           .from("membres_preinscriptions")
           .update({ email: finalEmail })
           .eq("id", personne.id);
 
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        if (updateError) throw new Error(updateError.message);
       }
 
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -159,54 +142,31 @@ export default function PremiereConnexionPage() {
         password: finalPassword,
       });
 
-      if (signUpError) {
-        throw new Error(signUpError.message);
-      }
+      if (signUpError) throw new Error(signUpError.message);
 
-      const session = signUpData.session;
-      const user = signUpData.user;
-
-      if (session && user) {
-        const { data: finalizeData, error: finalizeError } = await supabase.rpc(
-          "fn_membre_finaliser_premiere_connexion",
-          {
-            p_membre_id: personne.id,
-          }
-        );
-
-        if (finalizeError) {
-          throw new Error(finalizeError.message);
-        }
-
-        const finalizeRes: FinalizeResult | undefined = Array.isArray(finalizeData)
-          ? finalizeData[0]
-          : finalizeData;
-
-        if (!finalizeRes || finalizeRes.code !== "OK") {
-          setMessage(
-            finalizeRes?.message ||
-              "Compte créé, mais la finalisation de la première connexion a échoué."
-          );
-          return;
-        }
-
-        setMessage("Compte créé et première connexion finalisée avec succès.");
-        setTimeout(() => {
-          router.push("/login");
-        }, 1200);
+      if (!signUpData.session) {
+        setMessage("Le compte a été créé mais aucune session n’a été ouverte. Désactive Confirm Email dans Supabase.");
         return;
       }
 
-      if (user && !session) {
-        setMessage(
-          "Email enregistré et compte créé. Vérifie maintenant ta boîte mail pour confirmer ton inscription, puis connecte-toi avec cet email et le mot de passe choisi."
-        );
-        return;
-      }
-
-      setMessage(
-        "Email enregistré. Le compte semble créé, mais la session n’a pas été ouverte automatiquement."
+      const { data: finalizeData, error: finalizeError } = await supabase.rpc(
+        "fn_membre_finaliser_premiere_connexion",
+        { p_membre_id: personne.id }
       );
+
+      if (finalizeError) throw new Error(finalizeError.message);
+
+      const finalizeRes: FinalizeResult | undefined = Array.isArray(finalizeData)
+        ? finalizeData[0]
+        : finalizeData;
+
+      if (!finalizeRes || finalizeRes.code !== "OK") {
+        setMessage(finalizeRes?.message || "Finalisation refusée.");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
     } catch (e: any) {
       setMessage(e?.message || "Erreur lors de l’activation.");
     } finally {
@@ -241,17 +201,11 @@ export default function PremiereConnexionPage() {
         <>
           <div className="rounded border p-3">
             <p className="font-medium">{personne.nom_complet}</p>
-            <p className="text-sm text-slate-600">
-              Type : {personne.type_personne}
-            </p>
+            <p className="text-sm text-slate-600">Type : {personne.type_personne}</p>
             {personne.email_masque ? (
-              <p className="text-sm text-slate-600">
-                Email connu : {personne.email_masque}
-              </p>
+              <p className="text-sm text-slate-600">Email actuel : {personne.email_masque}</p>
             ) : (
-              <p className="text-sm text-slate-600">
-                Aucun email enregistré, saisis l’email à utiliser.
-              </p>
+              <p className="text-sm text-slate-600">Aucun email enregistré.</p>
             )}
           </div>
 
