@@ -4,16 +4,50 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
+type InitResult = {
+  code: string;
+  message: string;
+  membre_id: string | null;
+  nom_complet: string | null;
+  email_masque: string | null;
+  role: string | null;
+  statut_actif: boolean | null;
+  premiere_connexion_effectuee: boolean | null;
+  type_personne: "MEMBRE" | "PREINSCRIT" | null;
+};
+
+type VerifyResult = {
+  code: string;
+  message: string;
+  membre_id: string | null;
+  nom_complet: string | null;
+  email: string | null;
+  role: string | null;
+  type_personne: "MEMBRE" | "PREINSCRIT" | null;
+};
+
+type FinalizeResult = {
+  code: string;
+  message: string;
+  membre_id: string | null;
+  auth_user_id: string | null;
+  nom_complet: string | null;
+  email: string | null;
+  role: string | null;
+  type_personne: "MEMBRE" | "PREINSCRIT" | null;
+};
+
 type PersonneTrouvee = {
   id: string;
   nom_complet: string;
-  telephone: string | null;
-  email?: string | null;
+  email_masque: string | null;
+  email_verifie: string | null;
+  role: string | null;
   type_personne: "MEMBRE" | "PREINSCRIT";
 };
 
 function normalizePhone(value: string) {
-  return (value || "").replace(/\s+/g, "").replace(/-/g, "");
+  return (value || "").trim();
 }
 
 export default function PremiereConnexionPage() {
@@ -21,8 +55,8 @@ export default function PremiereConnexionPage() {
 
   const [telephone, setTelephone] = useState("");
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState(1);
-  const [membre, setMembre] = useState<PersonneTrouvee | null>(null);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [personne, setPersonne] = useState<PersonneTrouvee | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -33,165 +67,218 @@ export default function PremiereConnexionPage() {
     try {
       const tel = normalizePhone(telephone);
 
-      const { data: membres } = await supabase
-        .from("membres")
-        .select("id, nom_complet, telephone, email");
+      const { data, error } = await supabase.rpc(
+        "fn_membre_premiere_connexion_init",
+        {
+          p_telephone: tel,
+        }
+      );
 
-      const membreTrouve =
-        (membres || []).find(
-          (m: any) => normalizePhone(m.telephone || "") === tel
-        ) || null;
+      if (error) {
+        throw new Error(error.message);
+      }
 
-      if (membreTrouve) {
-        setMembre({
-          id: membreTrouve.id,
-          nom_complet: membreTrouve.nom_complet,
-          telephone: membreTrouve.telephone,
-          email: membreTrouve.email ?? null,
-          type_personne: "MEMBRE",
-        });
-        setStep(2);
-        setBusy(false);
+      const res: InitResult | undefined = Array.isArray(data) ? data[0] : data;
+
+      if (!res) {
+        setMessage("Aucune réponse du serveur.");
         return;
       }
 
-      const { data: preinscrits } = await supabase
-        .from("membres_preinscriptions")
-        .select("id, nom_complet, telephone, email");
-
-      const preinscritTrouve =
-        (preinscrits || []).find(
-          (p: any) => normalizePhone(p.telephone || "") === tel
-        ) || null;
-
-      if (preinscritTrouve) {
-        setMembre({
-          id: preinscritTrouve.id,
-          nom_complet: preinscritTrouve.nom_complet,
-          telephone: preinscritTrouve.telephone,
-          email: preinscritTrouve.email ?? null,
-          type_personne: "PREINSCRIT",
-        });
-        setStep(2);
-        setBusy(false);
+      if (res.code !== "ELIGIBLE" || !res.membre_id || !res.nom_complet || !res.type_personne) {
+        setMessage(res.message || "Numéro non reconnu.");
         return;
       }
 
-      setMessage("Aucun membre trouvé.");
+      setPersonne({
+        id: res.membre_id,
+        nom_complet: res.nom_complet,
+        email_masque: res.email_masque ?? null,
+        email_verifie: null,
+        role: res.role ?? null,
+        type_personne: res.type_personne,
+      });
+
+      setStep(2);
+      setMessage(
+        res.email_masque
+          ? `${res.message} Email attendu : ${res.email_masque}`
+          : res.message
+      );
     } catch (e: any) {
-      setMessage(e?.message || "Erreur.");
+      setMessage(e?.message || "Erreur lors de la vérification du téléphone.");
     } finally {
       setBusy(false);
     }
   };
 
-  const verifierEmail = async () => {
+  const verifierEmailEtActiver = async () => {
     setMessage("");
     setBusy(true);
 
     try {
-      if (!membre) return;
-
-      const finalEmail = email.trim().toLowerCase();
-
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: finalEmail,
-        password: "Temp1234!",
-      });
-
-      if (signUpError) {
-        setMessage(signUpError.message);
-        setBusy(false);
+      if (!personne) {
+        setMessage("Aucune personne sélectionnée.");
         return;
       }
 
-      // 🔥 CAS MEMBRE
-      if (membre.type_personne === "MEMBRE") {
-        await supabase
-          .from("membres")
-          .update({ email: finalEmail })
-          .eq("id", membre.id);
+      const finalEmail = email.trim().toLowerCase();
+
+      if (!finalEmail) {
+        setMessage("Saisis un email.");
+        return;
       }
 
-      // 🔥 CAS PREINSCRIT → TRANSFORMATION
-      if (membre.type_personne === "PREINSCRIT") {
-        const { data: pre } = await supabase
-          .from("membres_preinscriptions")
-          .select("*")
-          .eq("id", membre.id)
-          .single();
+      const { data: verifyData, error: verifyError } = await supabase.rpc(
+        "fn_membre_premiere_connexion_verifier",
+        {
+          p_telephone: normalizePhone(telephone),
+          p_email: finalEmail,
+        }
+      );
 
-        if (pre) {
-          // INSERT DANS MEMBRES
-          await supabase.from("membres").insert({
-            id: pre.id,
-            nom_complet: pre.nom_complet,
-            telephone: pre.telephone,
-            email: finalEmail,
-          });
+      if (verifyError) {
+        throw new Error(verifyError.message);
+      }
 
-          // 🔥 SUPPRESSION PREINSCRIT
-          await supabase
-            .from("membres_preinscriptions")
-            .delete()
-            .eq("id", pre.id);
+      const verifyRes: VerifyResult | undefined = Array.isArray(verifyData)
+        ? verifyData[0]
+        : verifyData;
+
+      if (!verifyRes) {
+        setMessage("Aucune réponse du serveur.");
+        return;
+      }
+
+      if (verifyRes.code !== "ELIGIBLE" || !verifyRes.membre_id) {
+        setMessage(verifyRes.message || "Vérification email refusée.");
+        return;
+      }
+
+      const password = "Temp1234!";
+
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: finalEmail,
+        password,
+      });
+
+      if (signUpError) {
+        throw new Error(signUpError.message);
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        const signInRes = await supabase.auth.signInWithPassword({
+          email: finalEmail,
+          password,
+        });
+
+        if (signInRes.error) {
+          throw new Error(
+            signInRes.error.message ||
+              "Compte créé mais session non ouverte automatiquement."
+          );
         }
       }
 
-      setMessage("Compte créé avec succès");
-      router.push("/login");
+      const { data: finalizeData, error: finalizeError } = await supabase.rpc(
+        "fn_membre_finaliser_premiere_connexion",
+        {
+          p_membre_id: verifyRes.membre_id,
+        }
+      );
+
+      if (finalizeError) {
+        throw new Error(finalizeError.message);
+      }
+
+      const finalizeRes: FinalizeResult | undefined = Array.isArray(finalizeData)
+        ? finalizeData[0]
+        : finalizeData;
+
+      if (!finalizeRes) {
+        setMessage("Finalisation incomplète.");
+        return;
+      }
+
+      if (finalizeRes.code !== "OK") {
+        setMessage(finalizeRes.message || "Finalisation refusée.");
+        return;
+      }
+
+      setMessage("Compte créé et première connexion finalisée avec succès.");
+      setTimeout(() => {
+        router.push("/login");
+      }, 1200);
     } catch (e: any) {
-      setMessage(e?.message || "Erreur");
+      setMessage(e?.message || "Erreur lors de l’activation.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="p-6 max-w-md mx-auto space-y-4">
+    <div className="mx-auto max-w-md space-y-4 p-6">
       <h1 className="text-xl font-bold">Première connexion</h1>
 
       {step === 1 && (
         <>
           <input
-            className="w-full border p-2 rounded"
-            placeholder="Téléphone"
+            className="w-full rounded border p-2"
+            placeholder="Numéro de téléphone"
             value={telephone}
             onChange={(e) => setTelephone(e.target.value)}
           />
 
           <button
-            className="w-full bg-blue-600 text-white p-2 rounded"
+            className="w-full rounded bg-blue-600 p-2 text-white disabled:opacity-60"
             onClick={verifierTelephone}
+            disabled={busy}
           >
-            Vérifier
+            {busy ? "Vérification..." : "Vérifier"}
           </button>
         </>
       )}
 
-      {step === 2 && membre && (
+      {step === 2 && personne && (
         <>
-          <p>
-            {membre.nom_complet} ({membre.type_personne})
-          </p>
+          <div className="rounded border p-3">
+            <p className="font-medium">{personne.nom_complet}</p>
+            <p className="text-sm text-slate-600">
+              Type : {personne.type_personne}
+            </p>
+            {personne.email_masque ? (
+              <p className="text-sm text-slate-600">
+                Email attendu : {personne.email_masque}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-600">
+                Aucun email enregistré, saisis l’email à utiliser.
+              </p>
+            )}
+          </div>
 
           <input
-            className="w-full border p-2 rounded"
+            className="w-full rounded border p-2"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
           <button
-            className="w-full bg-green-600 text-white p-2 rounded"
-            onClick={verifierEmail}
+            className="w-full rounded bg-green-600 p-2 text-white disabled:opacity-60"
+            onClick={verifierEmailEtActiver}
+            disabled={busy}
           >
-            Activer
+            {busy ? "Activation..." : "Activer mon compte"}
           </button>
         </>
       )}
 
-      {message && <p className="text-red-600">{message}</p>}
+      {message ? <p className="text-sm text-red-600">{message}</p> : null}
     </div>
   );
 }
