@@ -92,6 +92,28 @@ export default function PremiereConnexionPage() {
     }
   };
 
+  async function finaliserEtEntrer(membreId: string) {
+    const { data: finalizeData, error: finalizeError } = await supabase.rpc(
+      "fn_membre_finaliser_premiere_connexion",
+      { p_membre_id: membreId }
+    );
+
+    if (finalizeError) {
+      throw new Error(finalizeError.message);
+    }
+
+    const finalizeRes: FinalizeResult | undefined = Array.isArray(finalizeData)
+      ? finalizeData[0]
+      : finalizeData;
+
+    if (!finalizeRes || finalizeRes.code !== "OK") {
+      throw new Error(finalizeRes?.message || "Finalisation refusée.");
+    }
+
+    router.push("/dashboard");
+    router.refresh();
+  }
+
   const activerCompte = async () => {
     setMessage("");
     setBusy(true);
@@ -142,31 +164,45 @@ export default function PremiereConnexionPage() {
         password: finalPassword,
       });
 
-      if (signUpError) throw new Error(signUpError.message);
+      if (signUpError) {
+        const msg = (signUpError.message || "").toLowerCase();
 
-      if (!signUpData.session) {
-        setMessage("Le compte a été créé mais aucune session n’a été ouverte. Désactive Confirm Email dans Supabase.");
+        if (msg.includes("already registered") || msg.includes("already been registered") || msg.includes("user already registered")) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: finalEmail,
+            password: finalPassword,
+          });
+
+          if (signInError) {
+            throw new Error(
+              "Ce compte existe déjà. Connecte-toi avec le mot de passe déjà créé, ou demande un mot de passe provisoire à l’administrateur."
+            );
+          }
+
+          await finaliserEtEntrer(personne.id);
+          return;
+        }
+
+        throw new Error(signUpError.message);
+      }
+
+      if (signUpData.session) {
+        await finaliserEtEntrer(personne.id);
         return;
       }
 
-      const { data: finalizeData, error: finalizeError } = await supabase.rpc(
-        "fn_membre_finaliser_premiere_connexion",
-        { p_membre_id: personne.id }
-      );
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: finalEmail,
+        password: finalPassword,
+      });
 
-      if (finalizeError) throw new Error(finalizeError.message);
-
-      const finalizeRes: FinalizeResult | undefined = Array.isArray(finalizeData)
-        ? finalizeData[0]
-        : finalizeData;
-
-      if (!finalizeRes || finalizeRes.code !== "OK") {
-        setMessage(finalizeRes?.message || "Finalisation refusée.");
-        return;
+      if (signInError) {
+        throw new Error(
+          "Le compte a été créé mais la session ne s’est pas ouverte automatiquement."
+        );
       }
 
-      router.push("/dashboard");
-      router.refresh();
+      await finaliserEtEntrer(personne.id);
     } catch (e: any) {
       setMessage(e?.message || "Erreur lors de l’activation.");
     } finally {
