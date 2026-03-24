@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
@@ -239,6 +239,18 @@ export default function DashboardPage() {
   const isAdminLike = ["ADMIN", "PRESIDENT", "TRESORIER"].includes(profil?.role ?? "");
   const isMembre = (profil?.role ?? "") === "MEMBRE";
 
+  const totalBloc2 = useMemo(() => {
+    return bloc2Rows.reduce((sum, item) => sum + Number(item.montant_session ?? 0), 0);
+  }, [bloc2Rows]);
+
+  const totalRetardsMembre = useMemo(() => {
+    return (
+      Number(bloc3?.retard_secours ?? 0) +
+      Number(bloc3?.retard_projet ?? 0) +
+      Number(bloc3?.retard_fond_roulement ?? 0)
+    );
+  }, [bloc3]);
+
   const cartesGlobales = dashboardGlobal
     ? [
         {
@@ -400,39 +412,55 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
-                  <h2 className="text-xl font-semibold">Accès rapides</h2>
+                {isAdminLike ? (
+                  <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+                    <h2 className="text-xl font-semibold">Accès rapides</h2>
 
-                  <div className="mt-4 grid gap-3">
-                    <Link
-                      href="/notifications"
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
-                    >
-                      Ouvrir mes notifications
-                    </Link>
+                    <div className="mt-4 grid gap-3">
+                      <Link
+                        href="/notifications"
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
+                      >
+                        Ouvrir mes notifications
+                      </Link>
 
-                    <Link
-                      href="/prets"
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-violet-400/30 hover:bg-violet-400/10"
-                    >
-                      Accéder au module prêts
-                    </Link>
+                      <Link
+                        href="/prets"
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-violet-400/30 hover:bg-violet-400/10"
+                      >
+                        Accéder au module prêts
+                      </Link>
 
-                    <Link
-                      href="/investissements"
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-emerald-400/30 hover:bg-emerald-400/10"
-                    >
-                      Accéder aux investissements
-                    </Link>
+                      <Link
+                        href="/investissements"
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-emerald-400/30 hover:bg-emerald-400/10"
+                      >
+                        Accéder aux investissements
+                      </Link>
 
-                    <Link
-                      href="/membres"
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-amber-400/30 hover:bg-amber-400/10"
-                    >
-                      Voir les membres
-                    </Link>
+                      <Link
+                        href="/membres"
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-amber-400/30 hover:bg-amber-400/10"
+                      >
+                        Voir les membres
+                      </Link>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+                    <h2 className="text-xl font-semibold">Mon espace membre</h2>
+
+                    <div className="mt-4 grid gap-3">
+                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
+                        Votre tableau de bord affiche uniquement les informations utiles à votre suivi personnel.
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
+                        Utilisez le menu latéral pour accéder à vos modules autorisés : Membres, Prêts, Investissements et Notifications.
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -474,39 +502,63 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {bloc1Rubriques.map((item) => (
-                    <div
-                      key={item.rubrique_nom}
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
-                    >
-                      <div className="text-sm text-slate-400">{item.rubrique_nom}</div>
-                      <div className="mt-3 text-2xl font-semibold text-white">
-                        {formatMontant(item.total_session)}
+                  {bloc1Rubriques.length > 0 ? (
+                    bloc1Rubriques.map((item) => (
+                      <div
+                        key={item.rubrique_nom}
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
+                      >
+                        <div className="text-sm text-slate-400">{item.rubrique_nom}</div>
+                        <div className="mt-3 text-2xl font-semibold text-white">
+                          {formatMontant(item.total_session)}
+                        </div>
+                        <div className="mt-2 text-sm text-slate-300">Total session par rubrique</div>
                       </div>
-                      <div className="mt-2 text-sm text-slate-300">Total session par rubrique</div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5 text-sm text-slate-300 md:col-span-2 xl:col-span-4">
+                      Aucune donnée par rubrique disponible pour la session en cours.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             ) : null}
 
-            {isMembre && bloc2Rows.length > 0 ? (
+            {isMembre ? (
               <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
-                <h2 className="mb-6 text-2xl font-semibold">Bloc 2 · Ma contribution de la session</h2>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {bloc2Rows.map((item) => (
-                    <div
-                      key={item.rubrique_nom}
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
-                    >
-                      <div className="text-sm text-slate-400">{item.rubrique_nom}</div>
-                      <div className="mt-3 text-2xl font-semibold text-white">
-                        {formatMontant(item.montant_session)}
-                      </div>
-                      <div className="mt-2 text-sm text-slate-300">Ma contribution du mois</div>
-                    </div>
-                  ))}
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-semibold">Bloc 2 · Ma contribution de la session</h2>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Détail de vos contributions sur la session en cours.
+                    </p>
+                  </div>
+
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">
+                    Total {formatMontant(totalBloc2)}
+                  </span>
                 </div>
+
+                {bloc2Rows.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {bloc2Rows.map((item) => (
+                      <div
+                        key={item.rubrique_nom}
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
+                      >
+                        <div className="text-sm text-slate-400">{item.rubrique_nom}</div>
+                        <div className="mt-3 text-2xl font-semibold text-white">
+                          {formatMontant(item.montant_session)}
+                        </div>
+                        <div className="mt-2 text-sm text-slate-300">Ma contribution du mois</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5 text-sm text-slate-300">
+                    Aucune contribution enregistrée pour vous sur la session en cours.
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -575,11 +627,7 @@ export default function DashboardPage() {
                   <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
                     <div className="text-sm text-slate-400">Situation retards</div>
                     <div className="mt-3 text-2xl font-semibold text-white">
-                      {formatMontant(
-                        Number(bloc3.retard_secours ?? 0) +
-                          Number(bloc3.retard_projet ?? 0) +
-                          Number(bloc3.retard_fond_roulement ?? 0)
-                      )}
+                      {formatMontant(totalRetardsMembre)}
                     </div>
                     <div className="mt-2 text-sm text-slate-300">
                       Secours {formatMontant(bloc3.retard_secours)} · Projet {formatMontant(bloc3.retard_projet)} · Fond de roulement {formatMontant(bloc3.retard_fond_roulement)}
@@ -592,7 +640,7 @@ export default function DashboardPage() {
                       {formatMontant(bloc3.montant_aides_secours)}
                     </div>
                     <div className="mt-2 text-sm text-slate-300">
-                      Sera alimenté dès que tu me donnes la table exacte des décaissements secours
+                      Total des aides secours déjà rattachées à votre situation.
                     </div>
                   </div>
                 </div>
