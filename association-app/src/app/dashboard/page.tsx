@@ -53,20 +53,42 @@ type DashboardGlobal = {
   nb_decisions_tracees_partiel: number;
 };
 
-type DashboardMembre = {
+type Bloc1Session = {
+  session_libelle: string;
+  total_inscrits: number;
+  nb_contributeurs: number;
+  total_caisse_session: number;
+};
+
+type Bloc1Rubrique = {
+  session_libelle: string;
+  rubrique_nom: string;
+  total_session: number;
+};
+
+type Bloc2Row = {
+  session_libelle: string;
+  rubrique_nom: string;
+  montant_session: number;
+};
+
+type Bloc3Situation = {
   membre_id: string;
+  cumul_tontine_grand_cahier: number;
+  cumul_tontine_petit_cahier: number;
+  cumul_anniversaire: number;
+  cumul_repas: number;
+  cumul_investissement: number;
   nb_prets: number;
   nb_prets_en_cours: number;
   nb_prets_soldes: number;
   total_pret: number;
   total_rembourse: number;
   reste_a_payer: number;
-  nb_remboursements: number;
-  total_remboursements_effectues: number;
-  nb_investissements: number;
-  capital_investi: number;
-  interets_generes: number;
-  total_disponible: number;
+  retard_secours: number;
+  retard_projet: number;
+  retard_fond_roulement: number;
+  montant_aides_secours: number;
 };
 
 function formatMontant(valeur: number | null | undefined) {
@@ -95,7 +117,10 @@ export default function DashboardPage() {
 
   const [profil, setProfil] = useState<Profil | null>(null);
   const [dashboardGlobal, setDashboardGlobal] = useState<DashboardGlobal | null>(null);
-  const [dashboardMembre, setDashboardMembre] = useState<DashboardMembre | null>(null);
+  const [bloc1Session, setBloc1Session] = useState<Bloc1Session | null>(null);
+  const [bloc1Rubriques, setBloc1Rubriques] = useState<Bloc1Rubrique[]>([]);
+  const [bloc2Rows, setBloc2Rows] = useState<Bloc2Row[]>([]);
+  const [bloc3, setBloc3] = useState<Bloc3Situation | null>(null);
   const [chargement, setChargement] = useState(true);
   const [deconnexion, setDeconnexion] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -130,26 +155,71 @@ export default function DashboardPage() {
         return;
       }
 
+      const [
+        bloc1SessionRes,
+        bloc1RubriquesRes,
+        globalRes,
+        bloc2Res,
+        bloc3Res,
+      ] = await Promise.all([
+        supabase.rpc("fn_dashboard_bloc1_session"),
+        supabase.rpc("fn_dashboard_bloc1_rubriques"),
+        ["ADMIN", "PRESIDENT", "TRESORIER"].includes(profilCharge.role)
+          ? supabase.rpc("fn_dashboard_global_admin")
+          : Promise.resolve({ data: null, error: null } as any),
+        profilCharge.role === "MEMBRE"
+          ? supabase.rpc("fn_dashboard_bloc2_membre_session")
+          : Promise.resolve({ data: null, error: null } as any),
+        profilCharge.role === "MEMBRE"
+          ? supabase.rpc("fn_dashboard_bloc3_membre_situation")
+          : Promise.resolve({ data: null, error: null } as any),
+      ]);
+
+      if (bloc1SessionRes.error) {
+        setErreur(bloc1SessionRes.error.message);
+        setChargement(false);
+        return;
+      }
+
+      if (bloc1RubriquesRes.error) {
+        setErreur(bloc1RubriquesRes.error.message);
+        setChargement(false);
+        return;
+      }
+
+      if (globalRes?.error) {
+        setErreur(globalRes.error.message);
+        setChargement(false);
+        return;
+      }
+
+      if (bloc2Res?.error) {
+        setErreur(bloc2Res.error.message);
+        setChargement(false);
+        return;
+      }
+
+      if (bloc3Res?.error) {
+        setErreur(bloc3Res.error.message);
+        setChargement(false);
+        return;
+      }
+
+      setBloc1Session(
+        bloc1SessionRes.data && bloc1SessionRes.data.length > 0
+          ? bloc1SessionRes.data[0]
+          : null
+      );
+
+      setBloc1Rubriques((bloc1RubriquesRes.data ?? []) as Bloc1Rubrique[]);
+
       if (["ADMIN", "PRESIDENT", "TRESORIER"].includes(profilCharge.role)) {
-        const { data, error } = await supabase.rpc("fn_dashboard_global_admin");
+        setDashboardGlobal(globalRes.data && globalRes.data.length > 0 ? globalRes.data[0] : null);
+      }
 
-        if (error) {
-          setErreur(error.message);
-          setChargement(false);
-          return;
-        }
-
-        setDashboardGlobal(data && data.length > 0 ? data[0] : null);
-      } else {
-        const { data, error } = await supabase.rpc("fn_dashboard_membre_connecte");
-
-        if (error) {
-          setErreur(error.message);
-          setChargement(false);
-          return;
-        }
-
-        setDashboardMembre(data && data.length > 0 ? data[0] : null);
+      if (profilCharge.role === "MEMBRE") {
+        setBloc2Rows((bloc2Res.data ?? []) as Bloc2Row[]);
+        setBloc3(bloc3Res.data && bloc3Res.data.length > 0 ? bloc3Res.data[0] : null);
       }
 
       setChargement(false);
@@ -164,6 +234,10 @@ export default function DashboardPage() {
     router.push("/login");
     router.refresh();
   }
+
+  const whatsapp = nettoyerTelephoneWhatsApp(profil?.telephone || null);
+  const isAdminLike = ["ADMIN", "PRESIDENT", "TRESORIER"].includes(profil?.role ?? "");
+  const isMembre = (profil?.role ?? "") === "MEMBRE";
 
   const cartesGlobales = dashboardGlobal
     ? [
@@ -199,33 +273,6 @@ export default function DashboardPage() {
         },
       ]
     : [];
-
-  const cartesMembre = dashboardMembre
-    ? [
-        {
-          titre: "Mes prêts",
-          valeur: String(dashboardMembre.nb_prets ?? 0),
-          sousTexte: "En cours " + String(dashboardMembre.nb_prets_en_cours ?? 0),
-        },
-        {
-          titre: "Reste à payer",
-          valeur: formatMontant(dashboardMembre.reste_a_payer),
-          sousTexte: "Remboursé " + formatMontant(dashboardMembre.total_rembourse),
-        },
-        {
-          titre: "Mes investissements",
-          valeur: String(dashboardMembre.nb_investissements ?? 0),
-          sousTexte: "Capital " + formatMontant(dashboardMembre.capital_investi),
-        },
-        {
-          titre: "Mes gains",
-          valeur: formatMontant(dashboardMembre.interets_generes),
-          sousTexte: "Disponible " + formatMontant(dashboardMembre.total_disponible),
-        },
-      ]
-    : [];
-
-  const whatsapp = nettoyerTelephoneWhatsApp(profil?.telephone || null);
 
   return (
     <AppShell>
@@ -389,29 +436,174 @@ export default function DashboardPage() {
               </div>
             ) : null}
 
-            {dashboardGlobal ? (
+            {bloc1Session ? (
               <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
-                <h2 className="mb-6 text-2xl font-semibold">Indicateurs globaux</h2>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {cartesGlobales.map((carte) => (
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-semibold">Bloc 1 · Session du mois</h2>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Vision globale de la session {bloc1Session.session_libelle}
+                    </p>
+                  </div>
+
+                  <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-sm text-cyan-200">
+                    {bloc1Session.session_libelle}
+                  </span>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Total inscrits</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">{bloc1Session.total_inscrits}</div>
+                    <div className="mt-2 text-sm text-slate-300">Membres + préinscrits sans doublon</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Contributeurs du mois</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">{bloc1Session.nb_contributeurs}</div>
+                    <div className="mt-2 text-sm text-slate-300">Ayant contribué à la session</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5 md:col-span-2">
+                    <div className="text-sm text-slate-400">Total caisse session</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc1Session.total_caisse_session)}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-300">Montant total encaissé sur la session</div>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {bloc1Rubriques.map((item) => (
                     <div
-                      key={carte.titre}
+                      key={item.rubrique_nom}
                       className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
                     >
-                      <div className="text-sm text-slate-400">{carte.titre}</div>
-                      <div className="mt-3 text-2xl font-semibold">{carte.valeur}</div>
-                      <div className="mt-2 text-sm text-slate-300">{carte.sousTexte}</div>
+                      <div className="text-sm text-slate-400">{item.rubrique_nom}</div>
+                      <div className="mt-3 text-2xl font-semibold text-white">
+                        {formatMontant(item.total_session)}
+                      </div>
+                      <div className="mt-2 text-sm text-slate-300">Total session par rubrique</div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : null}
 
-            {dashboardMembre ? (
+            {isMembre && bloc2Rows.length > 0 ? (
               <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
-                <h2 className="mb-6 text-2xl font-semibold">Mon espace membre</h2>
+                <h2 className="mb-6 text-2xl font-semibold">Bloc 2 · Ma contribution de la session</h2>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {cartesMembre.map((carte) => (
+                  {bloc2Rows.map((item) => (
+                    <div
+                      key={item.rubrique_nom}
+                      className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
+                    >
+                      <div className="text-sm text-slate-400">{item.rubrique_nom}</div>
+                      <div className="mt-3 text-2xl font-semibold text-white">
+                        {formatMontant(item.montant_session)}
+                      </div>
+                      <div className="mt-2 text-sm text-slate-300">Ma contribution du mois</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {isMembre && bloc3 ? (
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+                <h2 className="mb-6 text-2xl font-semibold">Bloc 3 · Ma situation associative</h2>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Cumul Tontine Grand Cahier</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc3.cumul_tontine_grand_cahier)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Cumul Tontine Petit Cahier</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc3.cumul_tontine_petit_cahier)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Cumul Anniversaire</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc3.cumul_anniversaire)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Cumul Repas</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc3.cumul_repas)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Cumul Investissement</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc3.cumul_investissement)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Situation prêts</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {bloc3.nb_prets_en_cours}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-300">
+                      En cours · Reste à payer {formatMontant(bloc3.reste_a_payer)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Historique / demandes de prêt</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {bloc3.nb_prets}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-300">
+                      Total prêt {formatMontant(bloc3.total_pret)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Situation retards</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(
+                        Number(bloc3.retard_secours ?? 0) +
+                          Number(bloc3.retard_projet ?? 0) +
+                          Number(bloc3.retard_fond_roulement ?? 0)
+                      )}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-300">
+                      Secours {formatMontant(bloc3.retard_secours)} · Projet {formatMontant(bloc3.retard_projet)} · Fond de roulement {formatMontant(bloc3.retard_fond_roulement)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                    <div className="text-sm text-slate-400">Aides caisse secours</div>
+                    <div className="mt-3 text-2xl font-semibold text-white">
+                      {formatMontant(bloc3.montant_aides_secours)}
+                    </div>
+                    <div className="mt-2 text-sm text-slate-300">
+                      Sera alimenté dès que tu me donnes la table exacte des décaissements secours
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {isAdminLike && dashboardGlobal ? (
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+                <h2 className="mb-6 text-2xl font-semibold">Indicateurs globaux validateurs</h2>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {cartesGlobales.map((carte) => (
                     <div
                       key={carte.titre}
                       className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
