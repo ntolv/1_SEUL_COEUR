@@ -1,1 +1,5 @@
-.vercel
+﻿association-app/node_modules
+association-app/.next
+association-app/.vercel
+association-app/association-app
+association-app/.env.local
