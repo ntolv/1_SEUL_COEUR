@@ -110,7 +110,7 @@ export default function PremiereConnexionPage() {
       throw new Error(finalizeRes?.message || "Finalisation refusée.");
     }
 
-    router.push("/dashboard");
+    router.push("/");
     router.refresh();
   }
 
@@ -282,3 +282,4 @@ export default function PremiereConnexionPage() {
     </div>
   );
 }
+

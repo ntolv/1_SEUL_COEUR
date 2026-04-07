@@ -55,7 +55,7 @@ export default function ChangerMotDePassePage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/");
       router.refresh();
     } catch (e: any) {
       setMessage(e?.message || "Erreur lors du changement du mot de passe.");
@@ -109,3 +109,4 @@ export default function ChangerMotDePassePage() {
     </main>
   );
 }
+
