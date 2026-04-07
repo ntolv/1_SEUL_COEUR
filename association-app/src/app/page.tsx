@@ -99,9 +99,8 @@ export default function HomePage() {
   const accesAdmin: AccesItem[] = [
     { titre: "Dashboard", description: "Voir ma synthèse", lien: "/dashboard", icone: "📊" },
     { titre: "Membres", description: "Consulter les membres", lien: "/membres", icone: "👥" },
-    { titre: "Encaissements", description: "Gérer les contributions", lien: "/encaissements", icone: "💵" },
-    { titre: "Situation globale", description: "Voir la situation complète", lien: "/situation-globale", icone: "🌍" },
-    { titre: "Prêts", description: "Suivre les prêts", lien: "/prets", icone: "💰" },
+    { titre: "Synthèse caisse", description: "Voir la situation complète", lien: "/synthese-caisse", icone: "🌍" },
+    { titre: "Prêts et Aides", description: "Gérer les prêts et aides", lien: "/prets-et-aides", icone: "�" },
     { titre: "Investissements", description: "Consulter les investissements", lien: "/investissements", icone: "📈" },
     { titre: "Notifications", description: "Voir les notifications", lien: "/notifications", icone: "🔔" },
   ];

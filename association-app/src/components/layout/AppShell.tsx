@@ -67,6 +67,7 @@ const liens = [
   { href: "/synthese-caisse", label: "Synthèse caisse", icon: BarChart3 },
   { href: "/membres", label: "Membres" },
   { href: "/encaissements", label: "Encaissements" },
+  { href: "/suivi-contributions", label: "Suivi contributions" },
   { href: "/situation-globale", label: "Situation globale", icon: BarChart3 },
   { href: "/prets", label: "Prêts" },
   { href: "/investissements", label: "Investissements" },
