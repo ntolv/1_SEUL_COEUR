@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
@@ -70,12 +70,12 @@ export default function SuiviContributionsPage() {
 
   function getStatutColor(statut: string) {
     switch (statut?.toLowerCase()) {
-      case 'payé':
+      case 'payÃ©':
       case 'paye':
         return 'text-emerald-200';
       case 'partiel':
         return 'text-amber-200';
-      case 'impayé':
+      case 'impayÃ©':
       case 'impaye':
         return 'text-red-200';
       default:
@@ -85,12 +85,12 @@ export default function SuiviContributionsPage() {
 
   function getStatutBg(statut: string) {
     switch (statut?.toLowerCase()) {
-      case 'payé':
+      case 'payÃ©':
       case 'paye':
         return 'bg-emerald-500/10 border-emerald-700/40';
       case 'partiel':
         return 'bg-amber-500/10 border-amber-700/40';
-      case 'impayé':
+      case 'impayÃ©':
       case 'impaye':
         return 'bg-red-500/10 border-red-700/40';
       default:
@@ -108,15 +108,15 @@ export default function SuiviContributionsPage() {
                 Suivi des contributions
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-white">
-                Suivi des contributions par membre
+                Suivi global des membres
               </h1>
               <p className="mt-2 text-sm text-slate-300">
-                Vue détaillée des contributions par membre et par rubrique.
+                Vue dÃ©taillÃ©e des contributions par membre et par rubrique.
               </p>
             </div>
 
             <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] px-4 py-3 text-sm text-slate-200">
-              {data.length} contribution{data.length > 1 ? "s" : ""} trouvée{data.length > 1 ? "s" : ""}
+              {data.length} contribution{data.length > 1 ? "s" : ""} trouvÃ©e{data.length > 1 ? "s" : ""}
             </div>
           </div>
         </div>
@@ -138,7 +138,7 @@ export default function SuiviContributionsPage() {
             {groupedData.length === 0 ? (
               <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
                 <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300 text-center">
-                  Aucune contribution trouvée.
+                  Aucune contribution trouvÃ©e.
                 </div>
               </div>
             ) : (
@@ -180,7 +180,7 @@ export default function SuiviContributionsPage() {
 
                           <div>
                             <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-1">
-                              Encaissé
+                              EncaissÃ©
                             </div>
                             <div className="text-sm font-semibold text-white">
                               {euro(contribution.montant_encaisse)}
@@ -217,3 +217,4 @@ export default function SuiviContributionsPage() {
     </AppShell>
   );
 }
+
