@@ -140,33 +140,17 @@ export default function EncaissementsPage() {
   }
 
   async function chargerPersonnes() {
-    const [{ data: membres, error: errM }, { data: preinscrits, error: errP }] =
-      await Promise.all([
-        supabase.from("membres").select("id, nom_complet, telephone"),
-        supabase.from("membres_preinscriptions").select("id, nom_complet, telephone"),
-      ]);
+    const { data: personnes, error } = await supabase.rpc("fn_encaissement_personnes_uniques");
 
-    if (errM) throw new Error(errM.message);
-    if (errP) throw new Error(errP.message);
+    if (error) throw new Error(error.message);
 
-    const list: PersonneRow[] = [
-      ...((membres ?? []).map((m: any) => ({
-        id: m.id,
-        nom_complet: m.nom_complet,
-        telephone: m.telephone ?? null,
-        type_personne: "MEMBRE" as const,
-      }))),
-      ...((preinscrits ?? []).map((p: any) => ({
-        id: p.id,
-        nom_complet: p.nom_complet,
-        telephone: p.telephone ?? null,
-        type_personne: "PREINSCRIT" as const,
-      }))),
-    ];
+    const list: PersonneRow[] = ((personnes ?? []) as any[]).map((p: any) => ({
+      id: p.id,
+      nom_complet: p.nom_complet,
+      telephone: p.telephone ?? null,
+      type_personne: p.type_personne as "MEMBRE" | "PREINSCRIT",
+    }));
 
-    list.sort((a, b) =>
-      a.nom_complet.localeCompare(b.nom_complet, "fr", { sensitivity: "base" })
-    );
     setPersonnes(list);
   }
 
@@ -561,7 +545,7 @@ export default function EncaissementsPage() {
                 Session {session ? `${String(session.mois).padStart(2, "0")}/${session.annee}` : "-"}
               </div>
               <p>
-                Ce bloc permet d’ouvrir ou de fermer la caisse du mois. Quand la caisse
+                Ce bloc permet d'ouvrir ou de fermer la caisse du mois. Quand la caisse
                 est fermée, aucun encaissement ne doit être validé.
               </p>
             </div>
