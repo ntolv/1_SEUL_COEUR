@@ -1,581 +1,251 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { supabase } from "@/lib/supabaseClient";
 
 type Profil = {
   id: string;
-  email: string | null;
-  nom_complet: string | null;
+  email: string;
+  nom_complet: string;
   telephone: string | null;
-  role: string | null;
-  statut_actif: boolean | null;
+  role: string;
+  statut_actif: boolean;
   photo_url: string | null;
   photo_storage_path: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
-type ContributionItem = {
-  rubrique: string;
-  montant: number;
+type AccesItem = {
+  titre: string;
+  description: string;
+  lien: string;
+  icone: string;
 };
 
-type AidePretItem = {
-  id: string;
-  libelle: string;
-  montant: number;
-  statut: string | null;
-  type: "AIDE" | "PRET";
-};
-
-function getInitiales(nom: string | null | undefined) {
-  const value = (nom ?? "").trim();
-  if (!value) return "US";
-  return value
-    .split(" ")
-    .filter(Boolean)
-    .map((x) => x[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-function formatMontant(value: number) {
-  return new Intl.NumberFormat("fr-FR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function normalizePhone(phone: string | null | undefined) {
-  if (!phone) return "";
-  return phone.replace(/[^\d+]/g, "");
-}
-
-async function loadProfil(userId: string): Promise<Profil | null> {
-  const candidats = [
-    { table: "profils", idColumn: "id" },
-    { table: "membres", idColumn: "id" },
-    { table: "v_membres", idColumn: "id" },
-    { table: "utilisateurs", idColumn: "id" },
-    { table: "utilisateurs", idColumn: "user_id" },
-  ];
-
-  for (const candidat of candidats) {
-    const { data, error } = await supabase
-      .from(candidat.table)
-      .select("*")
-      .eq(candidat.idColumn, userId)
-      .maybeSingle();
-
-    if (!error && data) {
-      return {
-        id: String((data as any).id ?? userId),
-        email: (data as any).email ?? null,
-        nom_complet:
-          (data as any).nom_complet ??
-          (data as any).full_name ??
-          (data as any).nom ??
-          null,
-        telephone:
-          (data as any).telephone ??
-          (data as any).phone ??
-          (data as any).numero_telephone ??
-          null,
-        role: (data as any).role ?? (data as any).profil ?? null,
-        statut_actif:
-          typeof (data as any).statut_actif === "boolean"
-            ? (data as any).statut_actif
-            : typeof (data as any).actif === "boolean"
-              ? (data as any).actif
-              : null,
-        photo_url:
-          (data as any).photo_url ??
-          (data as any).avatar_url ??
-          (data as any).photo ??
-          null,
-        photo_storage_path: (data as any).photo_storage_path ?? null,
-        created_at: (data as any).created_at ?? null,
-        updated_at: (data as any).updated_at ?? null,
-      };
-    }
-  }
-
-  return {
-    id: userId,
-    email: null,
-    nom_complet: "Membre connecté",
-    telephone: null,
-    role: null,
-    statut_actif: null,
-    photo_url: null,
-    photo_storage_path: null,
-    created_at: null,
-    updated_at: null,
-  };
-}
-
-async function loadContributions(userId: string): Promise<ContributionItem[]> {
-  const sources = [
-    { table: "v_contributions", memberColumn: "membre_id" },
-    { table: "contributions", memberColumn: "membre_id" },
-    { table: "contributions", memberColumn: "user_id" },
-  ];
-
-  for (const source of sources) {
-    const { data, error } = await supabase
-      .from(source.table)
-      .select("*")
-      .eq(source.memberColumn, userId);
-
-    if (!error && Array.isArray(data)) {
-      const map = new Map<string, number>();
-
-      for (const row of data as any[]) {
-        const rubrique =
-          row.rubrique ??
-          row.rubrique_nom ??
-          row.libelle_rubrique ??
-          row.type_contribution ??
-          "Rubrique non renseignée";
-
-        const montant = Number(
-          row.montant ??
-          row.montant_total ??
-          row.montant_paye ??
-          row.total ??
-          0
-        );
-
-        map.set(rubrique, (map.get(rubrique) ?? 0) + (Number.isFinite(montant) ? montant : 0));
-      }
-
-      return Array.from(map.entries())
-        .map(([rubrique, montant]) => ({ rubrique, montant }))
-        .sort((a, b) => b.montant - a.montant);
-    }
-  }
-
-  return [];
-}
-
-async function loadAidesEtPrets(userId: string): Promise<AidePretItem[]> {
-  const result: AidePretItem[] = [];
-
-  const aidesSources = [
-    { table: "v_aides", memberColumn: "membre_id" },
-    { table: "aides", memberColumn: "membre_id" },
-    { table: "aides", memberColumn: "user_id" },
-  ];
-
-  for (const source of aidesSources) {
-    const { data, error } = await supabase
-      .from(source.table)
-      .select("*")
-      .eq(source.memberColumn, userId);
-
-    if (!error && Array.isArray(data)) {
-      for (const row of data as any[]) {
-        result.push({
-          id: String(row.id ?? `${source.table}-${Math.random()}`),
-          libelle: row.libelle ?? row.objet ?? row.type_aide ?? "Aide",
-          montant: Number(row.montant ?? row.montant_aide ?? row.total ?? 0),
-          statut: row.statut ?? row.etat ?? null,
-          type: "AIDE",
-        });
-      }
-      break;
-    }
-  }
-
-  const pretsSources = [
-    { table: "v_prets", memberColumn: "membre_id" },
-    { table: "prets", memberColumn: "membre_id" },
-    { table: "prets", memberColumn: "user_id" },
-  ];
-
-  for (const source of pretsSources) {
-    const { data, error } = await supabase
-      .from(source.table)
-      .select("*")
-      .eq(source.memberColumn, userId);
-
-    if (!error && Array.isArray(data)) {
-      for (const row of data as any[]) {
-        result.push({
-          id: String(row.id ?? `${source.table}-${Math.random()}`),
-          libelle: row.libelle ?? row.objet ?? row.type_pret ?? "Prêt",
-          montant: Number(row.montant ?? row.montant_pret ?? row.total ?? 0),
-          statut: row.statut ?? row.etat ?? null,
-          type: "PRET",
-        });
-      }
-      break;
-    }
-  }
-
-  return result;
+function normalizeRole(role: string | null | undefined) {
+  return (role ?? "").trim().toUpperCase();
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [profil, setProfil] = useState<Profil | null>(null);
-  const [contributions, setContributions] = useState<ContributionItem[]>([]);
-  const [aidesEtPrets, setAidesEtPrets] = useState<AidePretItem[]>([]);
   const [chargement, setChargement] = useState(true);
-  const [erreur, setErreur] = useState<string | null>(null);
 
   useEffect(() => {
+    let actif = true;
+
     async function charger() {
-      setChargement(true);
-      setErreur(null);
-
       try {
+        setChargement(true);
+
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        if (userError) throw userError;
-        if (!user) throw new Error("Utilisateur non connecté.");
+        if (!actif) return;
 
-        const [profilData, contributionsData, aidesPretsData] = await Promise.all([
-          loadProfil(user.id),
-          loadContributions(user.id),
-          loadAidesEtPrets(user.id),
-        ]);
+        if (!session) {
+          setChargement(false);
+          router.replace("/login");
+          return;
+        }
 
-        const finalProfil: Profil = {
-          id: profilData?.id ?? user.id,
-          email: profilData?.email ?? user.email ?? null,
-          nom_complet: profilData?.nom_complet ?? user.email ?? "Membre connecté",
-          telephone: profilData?.telephone ?? null,
-          role: profilData?.role ?? null,
-          statut_actif: profilData?.statut_actif ?? true,
-          photo_url: profilData?.photo_url ?? null,
-          photo_storage_path: profilData?.photo_storage_path ?? null,
-          created_at: profilData?.created_at ?? null,
-          updated_at: profilData?.updated_at ?? null,
-        };
+        const { data: profilData, error: profilError } = await supabase.rpc("fn_me");
 
-        setProfil(finalProfil);
-        setContributions(contributionsData);
-        setAidesEtPrets(aidesPretsData);
-      } catch (e: any) {
-        console.error(e);
-        setErreur(e?.message ?? "Erreur de chargement.");
-      } finally {
+        if (!actif) return;
+
+        if (profilError || !profilData || profilData.length === 0) {
+          setProfil(null);
+          setChargement(false);
+          router.replace("/login");
+          return;
+        }
+
+        setProfil(profilData[0] as Profil);
         setChargement(false);
+      } catch {
+        if (!actif) return;
+        setProfil(null);
+        setChargement(false);
+        router.replace("/login");
       }
     }
 
     charger();
-  }, []);
 
-  const whatsappHref = useMemo(() => {
-    const phone = normalizePhone(profil?.telephone);
-    if (!phone) return null;
-    const finalPhone = phone.startsWith("+") ? phone.slice(1) : phone;
-    return "https://wa.me/" + finalPhone;
-  }, [profil?.telephone]);
+    return () => {
+      actif = false;
+    };
+  }, [router]);
 
-  const telephoneHref = useMemo(() => {
-    const phone = normalizePhone(profil?.telephone);
-    if (!phone) return null;
-    return "tel:" + phone;
-  }, [profil?.telephone]);
+  const roleNormalise = useMemo(() => normalizeRole(profil?.role), [profil?.role]);
 
-  const totalContributions = useMemo(() => {
-    return contributions.reduce((sum, item) => sum + item.montant, 0);
-  }, [contributions]);
+  const estRoleAdmin = useMemo(() => {
+    return ["ADMIN", "PRESIDENT", "TRESORIER"].includes(roleNormalise);
+  }, [roleNormalise]);
 
-  const aides = useMemo(() => aidesEtPrets.filter((item) => item.type === "AIDE"), [aidesEtPrets]);
-  const prets = useMemo(() => aidesEtPrets.filter((item) => item.type === "PRET"), [aidesEtPrets]);
+  const accesMembre: AccesItem[] = [
+    { titre: "Dashboard", description: "Voir ma synthèse", lien: "/dashboard", icone: "📊" },
+    { titre: "Membres", description: "Consulter les membres", lien: "/membres", icone: "👥" },
+    { titre: "Prêts", description: "Suivre les prêts", lien: "/prets", icone: "💰" },
+    { titre: "Investissements", description: "Consulter les investissements", lien: "/investissements", icone: "📈" },
+    { titre: "Notifications", description: "Voir les notifications", lien: "/notifications", icone: "🔔" },
+  ];
 
-  const totalAides = useMemo(() => aides.reduce((sum, item) => sum + item.montant, 0), [aides]);
-  const totalPrets = useMemo(() => prets.reduce((sum, item) => sum + item.montant, 0), [prets]);
+  const accesAdmin: AccesItem[] = [
+    { titre: "Dashboard", description: "Voir ma synthèse", lien: "/dashboard", icone: "📊" },
+    { titre: "Membres", description: "Consulter les membres", lien: "/membres", icone: "👥" },
+    { titre: "Encaissements", description: "Gérer les contributions", lien: "/encaissements", icone: "💵" },
+    { titre: "Situation globale", description: "Voir la situation complète", lien: "/situation-globale", icone: "🌍" },
+    { titre: "Prêts", description: "Suivre les prêts", lien: "/prets", icone: "💰" },
+    { titre: "Investissements", description: "Consulter les investissements", lien: "/investissements", icone: "📈" },
+    { titre: "Notifications", description: "Voir les notifications", lien: "/notifications", icone: "🔔" },
+  ];
+
+  const accesRapides = estRoleAdmin ? accesAdmin : accesMembre;
+  const actionsPrincipales = estRoleAdmin ? accesAdmin.slice(0, 4) : accesMembre.slice(0, 4);
+
+  if (chargement) {
+    return (
+      <AppShell>
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-slate-300">Chargement...</div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!profil) {
+    return (
+      <AppShell>
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-slate-300">Erreur de chargement</div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 p-6 text-white shadow-xl shadow-emerald-100">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/80">
-            Dashboard USC
-          </p>
-          <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
-            Situation synthétique du membre connecté
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm text-white/85 sm:text-base">
-            Vue d’ensemble du profil, des contributions et de la situation aides / prêts.
-          </p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        <div className="space-y-12 p-6">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-cyan-600/20 via-violet-600/20 to-emerald-600/20 p-12 backdrop-blur-xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />
+            <div className="relative z-10 text-center">
+              <h1 className="text-5xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl">
+                Bienvenue dans votre espace
+              </h1>
 
-        {chargement ? (
-          <div className="rounded-[28px] border border-slate-200 bg-white p-10 text-center text-sm font-medium text-slate-500 shadow-sm">
-            Chargement du dashboard...
+              <p className="mt-6 text-2xl font-semibold text-cyan-200 sm:text-3xl">
+                Association Un Seul Cœur
+              </p>
+
+              <div className="mt-8 flex justify-center">
+                <div className="inline-flex flex-wrap items-center justify-center gap-3 rounded-full border border-violet-400/30 bg-violet-400/10 px-6 py-3">
+                  <span className="text-violet-200">Rôle : {profil.role}</span>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                      profil.statut_actif
+                        ? "border-emerald-400/30 bg-emerald-400/20 text-emerald-200"
+                        : "border-red-400/30 bg-red-400/20 text-red-200"
+                    }`}
+                  >
+                    {profil.statut_actif ? "Actif" : "Inactif"}
+                  </span>
+                </div>
+              </div>
+
+              <p className="mt-8 text-xl text-slate-200">
+                {profil.nom_complet ? (
+                  <>
+                    Bonjour <span className="font-bold text-white">{profil.nom_complet}</span>, nous sommes ravis de
+                    vous retrouver sur votre espace personnel.
+                  </>
+                ) : (
+                  "Nous sommes ravis de vous retrouver sur votre espace personnel."
+                )}
+              </p>
+            </div>
           </div>
-        ) : erreur ? (
-          <div className="rounded-[28px] border border-rose-200 bg-rose-50 p-6 text-sm font-medium text-rose-700 shadow-sm">
-            {erreur}
-          </div>
-        ) : (
-          <>
-            <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-6 md:flex-row md:items-center">
-                  <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-[28px] border border-emerald-100 bg-emerald-50 text-3xl font-black text-emerald-700 shadow-inner">
-                    {profil?.photo_url ? (
-                      <img
-                        src={profil.photo_url}
-                        alt={profil.nom_complet ?? "Photo membre"}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span>{getInitiales(profil?.nom_complet)}</span>
-                    )}
-                  </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-black tracking-tight text-slate-900">
-                        {profil?.nom_complet ?? "Membre connecté"}
-                      </h2>
-                      <span
-                        className={[
-                          "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.16em]",
-                          profil?.statut_actif === false
-                            ? "bg-rose-100 text-rose-700"
-                            : "bg-emerald-100 text-emerald-700",
-                        ].join(" ")}
-                      >
-                        {profil?.statut_actif === false ? "Inactif" : "Actif"}
-                      </span>
-                    </div>
+          <div className="grid gap-8 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 to-white/5 p-8 backdrop-blur-xl">
+                <h2 className="mb-8 text-2xl font-bold text-white">Accès immédiat</h2>
 
-                    <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                      {profil?.role ?? "Rôle non renseigné"}
-                    </p>
-
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                          Email
-                        </p>
-                        <p className="mt-1 break-all text-sm font-semibold text-slate-900">
-                          {profil?.email ?? "Non renseigné"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                          Téléphone
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">
-                          {profil?.telephone ?? "Non renseigné"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      {telephoneHref ? (
-                        <a
-                          href={telephoneHref}
-                          className="inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100"
-                        >
-                          Appeler
-                        </a>
-                      ) : null}
-
-                      {whatsappHref ? (
-                        <a
-                          href={whatsappHref}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700 transition hover:-translate-y-0.5 hover:bg-sky-100"
-                        >
-                          WhatsApp
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4">
-                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                    Date d’inscription
-                  </p>
-                  <p className="mt-2 text-lg font-black text-slate-900">
-                    {formatDate(profil?.created_at)}
-                  </p>
-                </div>
-
-                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                    Dernière mise à jour
-                  </p>
-                  <p className="mt-2 text-lg font-black text-slate-900">
-                    {formatDate(profil?.updated_at)}
-                  </p>
-                </div>
-
-                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                    Total contributions
-                  </p>
-                  <p className="mt-2 text-lg font-black text-slate-900">
-                    {formatMontant(totalContributions)}
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                    Contributions
-                  </p>
-                  <h3 className="text-xl font-black tracking-tight text-slate-900">
-                    Synthèse par rubrique
-                  </h3>
-                </div>
-                <div className="rounded-2xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
-                  Total : {formatMontant(totalContributions)}
-                </div>
-              </div>
-
-              {contributions.length === 0 ? (
-                <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-medium text-slate-500">
-                  Aucune contribution trouvée pour le membre connecté.
-                </div>
-              ) : (
-                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {contributions.map((item) => (
-                    <div
-                      key={item.rubrique}
-                      className="rounded-[24px] border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {actionsPrincipales.map((action) => (
+                    <Link
+                      key={action.titre}
+                      href={action.lien}
+                      className="group rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/10 to-violet-500/10 p-6 transition-all hover:border-cyan-400/50 hover:from-cyan-500/20 hover:to-violet-500/20 hover:shadow-xl hover:shadow-cyan-400/20"
                     >
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                        Rubrique
-                      </p>
-                      <p className="mt-2 text-base font-black text-slate-900">
-                        {item.rubrique}
-                      </p>
-                      <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                        Montant
-                      </p>
-                      <p className="mt-1 text-2xl font-black text-emerald-700">
-                        {formatMontant(item.montant)}
-                      </p>
-                    </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-4xl transition-transform group-hover:scale-110">{action.icone}</div>
+                        <div>
+                          <div className="font-bold text-white group-hover:text-cyan-200">{action.titre}</div>
+                          <div className="text-sm text-slate-400">{action.description}</div>
+                        </div>
+                      </div>
+                    </Link>
                   ))}
                 </div>
-              )}
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">
-                      Aides
-                    </p>
-                    <h3 className="text-xl font-black tracking-tight text-slate-900">
-                      Situation aides obtenues
-                    </h3>
-                  </div>
-                  <div className="rounded-2xl bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700">
-                    Total : {formatMontant(totalAides)}
-                  </div>
-                </div>
-
-                {aides.length === 0 ? (
-                  <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-medium text-slate-500">
-                    Aucune aide trouvée.
-                  </div>
-                ) : (
-                  <div className="mt-5 space-y-3">
-                    {aides.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50 p-4"
-                      >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-black text-slate-900">{item.libelle}</p>
-                            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              {item.statut ?? "Statut non renseigné"}
-                            </p>
-                          </div>
-                          <div className="text-lg font-black text-amber-700">
-                            {formatMontant(item.montant)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
+            </div>
 
-              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">
-                      Prêts
-                    </p>
-                    <h3 className="text-xl font-black tracking-tight text-slate-900">
-                      Situation prêts obtenus
-                    </h3>
+            <div className="lg:col-span-1">
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 to-white/5 p-8 backdrop-blur-xl">
+                <h2 className="mb-8 text-2xl font-bold text-white">Informations</h2>
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2">
+                    <span className="text-sm text-slate-400">Rôle</span>
+                    <div className="font-medium text-white">{profil.role}</div>
                   </div>
-                  <div className="rounded-2xl bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700">
-                    Total : {formatMontant(totalPrets)}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2">
+                    <span className="text-sm text-slate-400">Statut</span>
+                    <div className={`font-medium ${profil.statut_actif ? "text-emerald-200" : "text-red-200"}`}>
+                      {profil.statut_actif ? "Actif" : "Inactif"}
+                    </div>
                   </div>
+                  {profil.email && (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2">
+                      <span className="text-sm text-slate-400">Email</span>
+                      <div className="truncate font-medium text-white">{profil.email}</div>
+                    </div>
+                  )}
                 </div>
-
-                {prets.length === 0 ? (
-                  <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-medium text-slate-500">
-                    Aucun prêt trouvé.
-                  </div>
-                ) : (
-                  <div className="mt-5 space-y-3">
-                    {prets.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50 p-4"
-                      >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-black text-slate-900">{item.libelle}</p>
-                            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              {item.statut ?? "Statut non renseigné"}
-                            </p>
-                          </div>
-                          <div className="text-lg font-black text-sky-700">
-                            {formatMontant(item.montant)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            </section>
-          </>
-        )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 to-white/5 p-8 backdrop-blur-xl">
+            <h2 className="mb-8 text-2xl font-bold text-white">Toutes les fonctionnalités</h2>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {accesRapides.map((acces) => (
+                <Link
+                  key={acces.titre}
+                  href={acces.lien}
+                  className="group rounded-3xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 transition-all hover:border-cyan-400/30 hover:bg-gradient-to-br hover:from-cyan-500/10 hover:to-violet-500/10 hover:shadow-xl hover:shadow-cyan-400/20"
+                >
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 text-5xl transition-transform group-hover:scale-110">{acces.icone}</div>
+                    <h3 className="mb-2 text-lg font-bold text-white group-hover:text-cyan-200">{acces.titre}</h3>
+                    <p className="text-sm text-slate-400">{acces.description}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <p className="text-slate-400">Association Un Seul Cœur • Ensemble pour un avenir meilleur</p>
+          </div>
+        </div>
       </div>
     </AppShell>
   );
