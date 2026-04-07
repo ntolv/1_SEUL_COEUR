@@ -128,6 +128,50 @@ async function loadProfil(userId: string): Promise<Profil | null> {
   };
 }
 
+async function loadContributions(userId: string): Promise<ContributionItem[]> {
+  const sources = [
+    { table: "v_contributions", memberColumn: "membre_id" },
+    { table: "contributions", memberColumn: "membre_id" },
+    { table: "contributions", memberColumn: "user_id" },
+  ];
+
+  for (const source of sources) {
+    const { data, error } = await supabase
+      .from(source.table)
+      .select("*")
+      .eq(source.memberColumn, userId);
+
+    if (!error && Array.isArray(data)) {
+      const map = new Map<string, number>();
+
+      for (const row of data as any[]) {
+        const rubrique =
+          row.rubrique ??
+          row.rubrique_nom ??
+          row.libelle_rubrique ??
+          row.type_contribution ??
+          "Rubrique non renseignée";
+
+        const montant = Number(
+          row.montant ??
+          row.montant_total ??
+          row.montant_paye ??
+          row.total ??
+          0
+        );
+
+        map.set(rubrique, (map.get(rubrique) ?? 0) + (Number.isFinite(montant) ? montant : 0));
+      }
+
+      return Array.from(map.entries())
+        .map(([rubrique, montant]) => ({ rubrique, montant }))
+        .sort((a, b) => b.montant - a.montant);
+    }
+  }
+
+  return [];
+}
+
 async function loadAidesEtPrets(userId: string): Promise<AidePretItem[]> {
   const result: AidePretItem[] = [];
 
@@ -213,10 +257,6 @@ export default function HomePage() {
           loadAidesEtPrets(user.id),
         ]);
 
-        if (contributionsResponse.error) {
-          console.error("Erreur fn_dashboard_contributions:", contributionsResponse.error);
-        }
-
         const contributionsData = contributionsResponse.data || [];
 
         const finalProfil: Profil = {
@@ -280,7 +320,7 @@ export default function HomePage() {
             Situation synthétique du membre connecté
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-white/85 sm:text-base">
-            Vue d'ensemble du profil, des contributions et de la situation aides / prêts.
+            Vue d’ensemble du profil, des contributions et de la situation aides / prêts.
           </p>
         </div>
 
@@ -378,7 +418,7 @@ export default function HomePage() {
               <div className="grid gap-4">
                 <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                    Date d'inscription
+                    Date d’inscription
                   </p>
                   <p className="mt-2 text-lg font-black text-slate-900">
                     {formatDate(profil?.created_at)}
