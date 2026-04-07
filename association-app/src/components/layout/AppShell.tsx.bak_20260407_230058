@@ -64,7 +64,6 @@ function XIcon(props: React.SVGProps<SVGSVGElement>) {
 
 const liens = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/synthese-caisse", label: "Synthèse caisse", icon: BarChart3 },
   { href: "/membres", label: "Membres" },
   { href: "/encaissements", label: "Encaissements" },
   { href: "/situation-globale", label: "Situation globale", icon: BarChart3 },
