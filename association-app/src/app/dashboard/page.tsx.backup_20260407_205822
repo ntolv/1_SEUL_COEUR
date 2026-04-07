@@ -204,15 +204,8 @@ export default function HomePage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        console.log("DEBUG user", user);
-        console.log("DEBUG userError", userError);
-
         if (userError) throw userError;
         if (!user) throw new Error("Utilisateur non connecté.");
-
-        const { data: meData, error: meError } = await supabase.rpc("fn_me");
-        console.log("DEBUG fn_me data", meData);
-        console.log("DEBUG fn_me error", meError);
 
         const [profilData, contributionsResponse, aidesPretsData] = await Promise.all([
           loadProfil(user.id),
@@ -220,17 +213,11 @@ export default function HomePage() {
           loadAidesEtPrets(user.id),
         ]);
 
-        console.log("DEBUG loadProfil result", profilData);
-        console.log("DEBUG fn_dashboard_contributions data", contributionsResponse.data);
-        console.log("DEBUG fn_dashboard_contributions error", contributionsResponse.error);
-        console.log("DEBUG loadAidesEtPrets result", aidesPretsData);
-
         if (contributionsResponse.error) {
           console.error("Erreur fn_dashboard_contributions:", contributionsResponse.error);
         }
 
         const contributionsData = contributionsResponse.data || [];
-        console.log("DEBUG contributionsData final", contributionsData);
 
         const finalProfil: Profil = {
           id: profilData?.id ?? user.id,
@@ -245,13 +232,11 @@ export default function HomePage() {
           updated_at: profilData?.updated_at ?? null,
         };
 
-        console.log("DEBUG finalProfil", finalProfil);
-
         setProfil(finalProfil);
         setContributions(contributionsData);
         setAidesEtPrets(aidesPretsData);
       } catch (e: any) {
-        console.error("DEBUG catch error", e);
+        console.error(e);
         setErreur(e?.message ?? "Erreur de chargement.");
       } finally {
         setChargement(false);

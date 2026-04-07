@@ -1,8 +1,9 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 function BarChart3(props: React.SVGProps<SVGSVGElement>) {
@@ -67,7 +68,7 @@ const liens = [
   { href: "/membres", label: "Membres" },
   { href: "/encaissements", label: "Encaissements" },
   { href: "/situation-globale", label: "Situation globale", icon: BarChart3 },
-  { href: "/prets", label: "Prêts" },
+  { href: "/prets", label: "PrÃªts" },
   { href: "/investissements", label: "Investissements" },
   { href: "/notifications", label: "Notifications" },
 ];
@@ -80,13 +81,10 @@ type NavProps = {
 function NavigationContent({ pathname, onNavigate }: NavProps) {
   const router = useRouter();
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     await supabase.auth.signOut();
-    if (onNavigate) onNavigate();
     router.replace("/login");
-    router.refresh();
-  }
-
+  };
   return (
     <>
       <div className="flex h-20 items-center border-b border-white/10 px-6">
@@ -125,12 +123,12 @@ function NavigationContent({ pathname, onNavigate }: NavProps) {
             );
           })}
         </div>
+              </div>
 
         <div className="mt-6 border-t border-white/10 pt-4">
           <button
-            type="button"
             onClick={handleLogout}
-            className="w-full rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-200 transition hover:bg-red-500/20"
+            className="w-full rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300 transition hover:bg-red-500/20"
           >
             Se déconnecter
           </button>
