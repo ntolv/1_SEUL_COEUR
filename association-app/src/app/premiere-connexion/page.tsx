@@ -15,12 +15,31 @@ export default function Page() {
 
   async function handleCreateAccount() {
     try {
+      setMessage("Recherche du membre préinscrit...");
+
+      // ÉTAPE 1: Retrouver le membre préinscrit par téléphone
+      if (!telephone.trim()) {
+        throw new Error("Veuillez saisir votre numéro de téléphone");
+      }
+
+      const { data: membreData, error: membreError } = await supabase
+        .from("membres_preinscriptions")
+        .select("id, nom_complet, email")
+        .eq("telephone", telephone.trim())
+        .single();
+
+      if (membreError || !membreData) {
+        throw new Error("Aucun membre préinscrit trouvé avec ce numéro de téléphone");
+      }
+
+      const foundMembreId = membreData.id;
+      setMembreId(foundMembreId);
       setMessage("Création du compte...");
 
       const finalEmail = email;
       const finalPassword = password;
 
-      // SIGNUP
+      // ÉTAPE 2: SIGNUP
       const { data: signUpData, error: signUpError } =
         await supabase.auth.signUp({
           email: finalEmail,
@@ -44,11 +63,30 @@ export default function Page() {
         }
       }
 
-      // Vérifier session
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      // GARANTIR SESSION : si signUp() n'a pas créé de session immédiate, forcer login
+      let session;
+      let sessionError;
+
+      const { data: sessionData, error: initialSessionError } = await supabase.auth.getSession();
+      
+      if (initialSessionError || !sessionData.session) {
+        // Pas de session immédiate → forcer login
+        const { data: signInData, error: forcedSignInError } =
+          await supabase.auth.signInWithPassword({
+            email: finalEmail,
+            password: finalPassword,
+          });
+
+        if (forcedSignInError) {
+          throw new Error("Échec de connexion après création du compte: " + forcedSignInError.message);
+        }
+
+        session = signInData.session;
+        sessionError = null;
+      } else {
+        session = sessionData.session;
+        sessionError = initialSessionError;
+      }
 
       if (sessionError || !session) {
         throw new Error("Session invalide après authentification");
@@ -58,7 +96,7 @@ export default function Page() {
       const { data: finalizeData, error: finalizeError } =
         await supabase.rpc(
           "fn_membre_finaliser_premiere_connexion",
-          { p_membre_id: membreId }
+          { p_membre_id: foundMembreId }
         );
 
       if (finalizeError) {
