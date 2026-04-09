@@ -22,12 +22,11 @@ export default function Page() {
         throw new Error("Veuillez saisir votre numéro de téléphone");
       }
 
-      const { data: membreData, error: membreError } = await supabase.rpc(
-  "fn_membre_premiere_connexion_verifier",
-  { p_telephone: telephone.trim() }
-);
-
-const membre = Array.isArray(membreData) ? membreData[0] : membreData;
+      const { data: membreData, error: membreError } = await supabase
+        .from("membres_preinscriptions")
+        .select("id, nom_complet, email")
+        .eq("telephone", telephone.trim())
+        .single();
 
       if (membreError || !membreData) {
         throw new Error("Aucun membre préinscrit trouvé avec ce numéro de téléphone");
@@ -260,4 +259,3 @@ const membre = Array.isArray(membreData) ? membreData[0] : membreData;
     </div>
   );
 }
-
