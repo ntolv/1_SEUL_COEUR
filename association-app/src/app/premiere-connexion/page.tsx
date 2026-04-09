@@ -10,7 +10,6 @@ export default function Page() {
   const [telephone, setTelephone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [membreId, setMembreId] = useState<string | null>(null);
   const [membreReconnu, setMembreReconnu] = useState<any>(null);
   const [etape, setEtape] = useState<1 | 2>(1);
   const [message, setMessage] = useState("");
@@ -33,11 +32,9 @@ export default function Page() {
         throw new Error("Aucun membre préinscrit trouvé avec ce numéro de téléphone");
       }
 
-      setMembreId(membreData.id);
       setMembreReconnu(membreData);
       setEtape(2);
       setMessage("");
-
     } catch (err: any) {
       setMessage(err.message);
     }
@@ -76,10 +73,10 @@ export default function Page() {
         }
       }
 
-      let session;
-      let sessionError;
+      let session = null;
 
-      const { data: sessionData, error: initialSessionError } = await supabase.auth.getSession();
+      const { data: sessionData, error: initialSessionError } =
+        await supabase.auth.getSession();
 
       if (initialSessionError || !sessionData.session) {
         const { data: signInData, error: forcedSignInError } =
@@ -89,25 +86,25 @@ export default function Page() {
           });
 
         if (forcedSignInError) {
-          throw new Error("Échec de connexion après création du compte: " + forcedSignInError.message);
+          throw new Error(
+            "Échec de connexion après création du compte: " +
+              forcedSignInError.message
+          );
         }
 
         session = signInData.session;
-        sessionError = null;
       } else {
         session = sessionData.session;
-        sessionError = initialSessionError;
       }
 
-      if (sessionError || !session) {
+      if (!session) {
         throw new Error("Session invalide après authentification");
       }
 
-      const { data: finalizeData, error: finalizeError } =
-        await supabase.rpc(
-          "fn_membre_finaliser_premiere_connexion",
-          { p_membre_id: membreReconnu.id }
-        );
+      const { data: finalizeData, error: finalizeError } = await supabase.rpc(
+        "fn_membre_finaliser_premiere_connexion",
+        { p_membre_id: membreReconnu.id }
+      );
 
       if (finalizeError) {
         throw new Error(finalizeError.message);
@@ -129,7 +126,6 @@ export default function Page() {
       }
 
       throw new Error(result.message || "Erreur inconnue");
-
     } catch (err: any) {
       setMessage(err.message);
     }
@@ -154,7 +150,7 @@ export default function Page() {
               padding: "10px",
               marginBottom: "10px",
               border: "1px solid #ccc",
-              borderRadius: "5px"
+              borderRadius: "5px",
             }}
           />
 
@@ -167,7 +163,7 @@ export default function Page() {
               color: "white",
               border: "none",
               borderRadius: "5px",
-              cursor: "pointer"
+              cursor: "pointer",
             }}
           >
             Vérifier mon numéro
@@ -177,13 +173,15 @@ export default function Page() {
 
       {etape === 2 && membreReconnu && (
         <div>
-          <div style={{
-            padding: "15px",
-            backgroundColor: "#d4edda",
-            border: "1px solid #c3e6cb",
-            borderRadius: "5px",
-            marginBottom: "20px"
-          }}>
+          <div
+            style={{
+              padding: "15px",
+              backgroundColor: "#d4edda",
+              border: "1px solid #c3e6cb",
+              borderRadius: "5px",
+              marginBottom: "20px",
+            }}
+          >
             <strong>Membre reconnu :</strong> {membreReconnu.nom_complet}
           </div>
 
@@ -200,7 +198,7 @@ export default function Page() {
               padding: "10px",
               marginBottom: "10px",
               border: "1px solid #ccc",
-              borderRadius: "5px"
+              borderRadius: "5px",
             }}
           />
 
@@ -214,7 +212,7 @@ export default function Page() {
               padding: "10px",
               marginBottom: "10px",
               border: "1px solid #ccc",
-              borderRadius: "5px"
+              borderRadius: "5px",
             }}
           />
 
@@ -227,7 +225,7 @@ export default function Page() {
               color: "white",
               border: "none",
               borderRadius: "5px",
-              cursor: "pointer"
+              cursor: "pointer",
             }}
           >
             Activer mon compte
@@ -236,14 +234,25 @@ export default function Page() {
       )}
 
       {message && (
-        <p style={{
-          marginTop: "15px",
-          padding: "10px",
-          backgroundColor: message.includes("Erreur") || message.includes("Aucun") ? "#f8d7da" : "#d1ecf1",
-          color: message.includes("Erreur") || message.includes("Aucun") ? "#721c24" : "#0c5460",
-          border: 1px solid ,
-          borderRadius: "5px"
-        }}>
+        <p
+          style={{
+            marginTop: "15px",
+            padding: "10px",
+            backgroundColor:
+              message.includes("Erreur") || message.includes("Aucun")
+                ? "#f8d7da"
+                : "#d1ecf1",
+            color:
+              message.includes("Erreur") || message.includes("Aucun")
+                ? "#721c24"
+                : "#0c5460",
+            border:
+              message.includes("Erreur") || message.includes("Aucun")
+                ? "1px solid #f5c6cb"
+                : "1px solid #bee5eb",
+            borderRadius: "5px",
+          }}
+        >
           {message}
         </p>
       )}
