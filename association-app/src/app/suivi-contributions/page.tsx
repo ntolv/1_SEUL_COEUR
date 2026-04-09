@@ -13,6 +13,14 @@ type Row = {
   statut_paiement: string | null;
 };
 
+type MembreBlock = {
+  membre_nom: string;
+  lignes: Row[];
+  total_attendu: number;
+  total_encaisse: number;
+  total_reste: number;
+};
+
 function euro(v: number | null | undefined) {
   const n = Number(v ?? 0);
   return new Intl.NumberFormat("fr-FR", {
@@ -31,6 +39,8 @@ function getStatutClasses(statut: string | null | undefined) {
       return "border-red-700/40 bg-red-500/10 text-red-200";
     case "ENCAISSE":
       return "border-cyan-700/40 bg-cyan-500/10 text-cyan-200";
+    case "SANS_ATTENDU":
+      return "border-slate-700/40 bg-slate-500/10 text-slate-300";
     default:
       return "border-slate-700/40 bg-slate-500/10 text-slate-300";
   }
@@ -84,29 +94,6 @@ export default function SuiviContributionsPage() {
     void chargerDonnees();
   }, []);
 
-  const sortedData = useMemo(() => {
-    return [...data].sort((a, b) => {
-      const statutCompare =
-        getStatutPriority(a.statut_paiement) -
-        getStatutPriority(b.statut_paiement);
-
-      if (statutCompare !== 0) return statutCompare;
-
-      const resteA = Number(a.reste ?? 0);
-      const resteB = Number(b.reste ?? 0);
-      if (resteB !== resteA) return resteB - resteA;
-
-      const membreA = a.membre_nom ?? "";
-      const membreB = b.membre_nom ?? "";
-      const membreCompare = membreA.localeCompare(membreB, "fr");
-      if (membreCompare !== 0) return membreCompare;
-
-      const rubriqueA = a.rubrique_nom ?? "";
-      const rubriqueB = b.rubrique_nom ?? "";
-      return rubriqueA.localeCompare(rubriqueB, "fr");
-    });
-  }, [data]);
-
   const totalEncaisse = useMemo(() => {
     return data.reduce((sum, row) => sum + Number(row.montant_encaisse ?? 0), 0);
   }, [data]);
@@ -119,13 +106,55 @@ export default function SuiviContributionsPage() {
     return data.reduce((sum, row) => sum + Number(row.reste ?? 0), 0);
   }, [data]);
 
-  const nbMembres = useMemo(() => {
-    const uniques = new Set(
-      data
-        .map((row) => (row.membre_nom ?? "").trim())
-        .filter((value) => value.length > 0)
-    );
-    return uniques.size;
+  const membres = useMemo<MembreBlock[]>(() => {
+    const grouped = new Map<string, Row[]>();
+
+    for (const row of data) {
+      const nom = (row.membre_nom ?? "Membre inconnu").trim() || "Membre inconnu";
+      const existing = grouped.get(nom) ?? [];
+      existing.push(row);
+      grouped.set(nom, existing);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([membre_nom, lignes]) => {
+        const lignesTriees = [...lignes].sort((a, b) => {
+          const statutCompare =
+            getStatutPriority(a.statut_paiement) -
+            getStatutPriority(b.statut_paiement);
+
+          if (statutCompare !== 0) return statutCompare;
+
+          const resteA = Number(a.reste ?? 0);
+          const resteB = Number(b.reste ?? 0);
+          if (resteB !== resteA) return resteB - resteA;
+
+          const rubriqueA = a.rubrique_nom ?? "";
+          const rubriqueB = b.rubrique_nom ?? "";
+          return rubriqueA.localeCompare(rubriqueB, "fr");
+        });
+
+        return {
+          membre_nom,
+          lignes: lignesTriees,
+          total_attendu: lignes.reduce(
+            (sum, row) => sum + Number(row.montant_attendu ?? 0),
+            0
+          ),
+          total_encaisse: lignes.reduce(
+            (sum, row) => sum + Number(row.montant_encaisse ?? 0),
+            0
+          ),
+          total_reste: lignes.reduce(
+            (sum, row) => sum + Number(row.reste ?? 0),
+            0
+          ),
+        };
+      })
+      .sort((a, b) => {
+        if (b.total_reste !== a.total_reste) return b.total_reste - a.total_reste;
+        return a.membre_nom.localeCompare(b.membre_nom, "fr");
+      });
   }, [data]);
 
   return (
@@ -138,15 +167,16 @@ export default function SuiviContributionsPage() {
                 Situation globale
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-white">
-                Suivi global de la situation de tous les membres
+                Suivi global par membre
               </h1>
               <p className="mt-2 text-sm text-slate-300">
-                Tous les membres, toutes les rubriques, attendus et encaissements.
+                Chaque membre a son bloc avec le détail de ses rubriques,
+                montants encaissés, reste et statut.
               </p>
             </div>
 
             <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] px-4 py-3 text-sm text-slate-200">
-              {data.length} ligne{data.length > 1 ? "s" : ""} trouvée
+              {membres.length} membre{membres.length > 1 ? "s" : ""} • {data.length} ligne
               {data.length > 1 ? "s" : ""}
             </div>
           </div>
@@ -186,7 +216,7 @@ export default function SuiviContributionsPage() {
                 Membres concernés
               </div>
               <div className="mt-2 text-2xl font-bold text-cyan-300">
-                {nbMembres}
+                {membres.length}
               </div>
             </div>
           </div>
@@ -204,77 +234,117 @@ export default function SuiviContributionsPage() {
               {error}
             </div>
           </div>
-        ) : sortedData.length === 0 ? (
+        ) : membres.length === 0 ? (
           <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
             <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-center text-slate-300">
               Aucune donnée trouvée.
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {sortedData.map((row, index) => (
+          <div className="space-y-6">
+            {membres.map((membre) => (
               <div
-                key={`${row.membre_nom ?? "membre"}-${row.rubrique_nom ?? "rubrique"}-${index}`}
-                className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4 shadow-[0_6px_20px_rgba(0,0,0,0.16)]"
+                key={membre.membre_nom}
+                className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.22)]"
               >
-                <div className="grid gap-4 md:grid-cols-6">
+                <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div>
-                    <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Membre
-                    </div>
-                    <div className="text-sm font-semibold text-white">
-                      {row.membre_nom ?? "-"}
-                    </div>
+                    <h2 className="text-2xl font-semibold text-white">
+                      {membre.membre_nom}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {membre.lignes.length} rubrique{membre.lignes.length > 1 ? "s" : ""}
+                    </p>
                   </div>
 
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Rubrique
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.14em] text-slate-400">
+                        Attendu
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-white">
+                        {euro(membre.total_attendu)}
+                      </div>
                     </div>
-                    <div className="text-sm font-medium text-white">
-                      {row.rubrique_nom ?? "-"}
+
+                    <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.14em] text-slate-400">
+                        Encaissé
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-emerald-300">
+                        {euro(membre.total_encaisse)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] px-4 py-3">
+                      <div className="text-xs uppercase tracking-[0.14em] text-slate-400">
+                        Reste
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-red-300">
+                        {euro(membre.total_reste)}
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Attendu
-                    </div>
-                    <div className="text-sm font-semibold text-white">
-                      {euro(row.montant_attendu)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Encaissé
-                    </div>
-                    <div className="text-sm font-semibold text-emerald-300">
-                      {euro(row.montant_encaisse)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Reste
-                    </div>
-                    <div className="text-sm font-semibold text-red-300">
-                      {euro(row.reste)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Statut
-                    </div>
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatutClasses(
-                        row.statut_paiement
-                      )}`}
+                <div className="space-y-3">
+                  {membre.lignes.map((row, index) => (
+                    <div
+                      key={`${membre.membre_nom}-${row.rubrique_nom ?? "rubrique"}-${index}`}
+                      className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4 shadow-[0_6px_20px_rgba(0,0,0,0.16)]"
                     >
-                      {row.statut_paiement ?? "-"}
-                    </span>
-                  </div>
+                      <div className="grid gap-4 md:grid-cols-5 xl:grid-cols-6">
+                        <div className="md:col-span-1 xl:col-span-2">
+                          <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                            Rubrique
+                          </div>
+                          <div className="text-sm font-semibold text-white">
+                            {row.rubrique_nom ?? "-"}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                            Attendu
+                          </div>
+                          <div className="text-sm font-semibold text-white">
+                            {euro(row.montant_attendu)}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                            Encaissé
+                          </div>
+                          <div className="text-sm font-semibold text-emerald-300">
+                            {euro(row.montant_encaisse)}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                            Reste
+                          </div>
+                          <div className="text-sm font-semibold text-red-300">
+                            {euro(row.reste)}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                            Statut
+                          </div>
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatutClasses(
+                              row.statut_paiement
+                            )}`}
+                          >
+                            {row.statut_paiement ?? "-"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
