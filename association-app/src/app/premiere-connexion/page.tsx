@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -11,8 +11,12 @@ type Preinscription = {
   statut_actif: boolean | null;
 };
 
-function normalizePhone(value: string) {
-  return (value ?? "").replace(/[^\d+]/g, "").trim();
+function normalizePhone(v: string | null) {
+  const digits = (v || "").replace(/\D/g, "");
+  if (digits.startsWith("33")) {
+    return "0" + digits.slice(2);
+  }
+  return digits;
 }
 
 export default function Page() {
@@ -30,12 +34,7 @@ export default function Page() {
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [loadingCreate, setLoadingCreate] = useState(false);
 
-  const normalizedTelephone = useMemo(
-    () => normalizePhone(telephone),
-    [telephone]
-  );
-
-  // 🔍 RECHERCHE
+  // 🔍 RECHERCHE PRÉINSCRIT (tolérant format)
   async function handleLookup() {
     try {
       setLoadingLookup(true);
@@ -44,20 +43,23 @@ export default function Page() {
       setPreinscriptionId(null);
       setMembreNom("");
 
-      if (!normalizedTelephone) {
+      if (!telephone) {
         setMessage("Veuillez saisir un téléphone.");
         return;
       }
 
       const { data, error } = await supabase
         .from("membres_preinscriptions")
-        .select("id, nom_complet, statut_actif")
-        .eq("telephone", normalizedTelephone)
-        .maybeSingle();
+        .select("id, nom_complet, telephone, statut_actif");
 
       if (error) throw new Error(error.message);
 
-      const row = data as Preinscription | null;
+      const inputTel = normalizePhone(telephone);
+
+      const row = (data || []).find(
+        (r: Preinscription) =>
+          normalizePhone(r.telephone) === inputTel
+      );
 
       if (!row) {
         setMessage("Préinscrit non reconnu.");
@@ -74,7 +76,7 @@ export default function Page() {
       setMembreNom(row.nom_complet || "");
       setIsRecognized(true);
 
-      // 🔴 IMPORTANT : on vide les champs
+      // champs vides obligatoires
       setEmail("");
       setPassword("");
 
@@ -131,11 +133,11 @@ export default function Page() {
         throw new Error("Session invalide.");
       }
 
-      // 🔥 BACKEND
+      // 🔥 BACKEND (cohérent avec fonction existante)
       const { data: finalizeData, error: finalizeError } =
         await supabase.rpc(
           "fn_membre_finaliser_premiere_connexion",
-          { p_preinscription_id: preinscriptionId }
+          { p_membre_id: preinscriptionId }
         );
 
       if (finalizeError) throw new Error(finalizeError.message);
