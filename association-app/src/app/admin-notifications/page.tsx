@@ -28,21 +28,18 @@ const { data, error } = await supabase
 .eq("statut_actif", true)
 .order("nom_complet", { ascending: true });
 
-```
   if (!error && data) {
     setMembres(data as MembreOption[]);
   }
 }
 
 chargerMembres();
-```
 
 }, []);
 
 async function envoyerNotification() {
 setRetour("");
 
-```
 if (!titre.trim()) {
   setRetour("Le titre est obligatoire.");
   return;
@@ -103,14 +100,12 @@ if (mode === "TOUS") {
 }
 
 setChargement(false);
-```
 
 }
 
 return ( <AppShell> <div className="space-y-6"> <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl"> <h1 className="text-2xl font-semibold">Envoi de notifications</h1> <p className="mt-2 text-sm text-slate-400">
 Envoi manuel admin vers tous les membres ou un membre précis. </p> </div>
 
-```
     <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
@@ -203,7 +198,6 @@ Envoi manuel admin vers tous les membres ou un membre précis. </p> </div>
     </div>
   </div>
 </AppShell>
-```
 
 );
 }
