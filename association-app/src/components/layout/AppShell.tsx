@@ -28,11 +28,9 @@ const { data } = await supabase
 .select("*")
 .single();
 
-```
 if (data) {
   setCount(data.total_non_lues || 0);
 }
-```
 
 }
 
@@ -40,7 +38,6 @@ useEffect(() => {
 let isMounted = true;
 let channel: ReturnType<typeof supabase.channel> | null = null;
 
-```
 async function initRealtime() {
   const {
     data: { session },
@@ -79,13 +76,11 @@ return () => {
     supabase.removeChannel(channel);
   }
 };
-```
 
 }, []);
 
 return ( <div className="min-h-screen w-full bg-[#020617] text-white"> <div className="fixed inset-0 -z-10"> <div className="absolute inset-0 bg-[#020617]" /> <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.15),transparent_30%)]" /> <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_30%)]" /> </div>
 
-```
   <div className="flex min-h-screen w-full">
     <aside className="hidden w-72 flex-col border-r border-white/10 bg-slate-950/80 backdrop-blur-xl lg:flex">
       <div className="p-6 text-lg font-semibold">UN SEUL COEUR</div>
@@ -184,7 +179,6 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white"> <div clas
     </div>
   </div>
 </div>
-```
 
 );
 }

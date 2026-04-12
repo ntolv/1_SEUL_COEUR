@@ -22,7 +22,6 @@ const [loading, setLoading] = useState(true);
 async function chargerNotifications() {
 setLoading(true);
 
-```
 const { data, error } = await supabase
   .from("v_notifications_me")
   .select("*")
@@ -33,7 +32,6 @@ if (!error && data) {
 }
 
 setLoading(false);
-```
 
 }
 
@@ -44,14 +42,12 @@ p_notification_id: notification.id,
 });
 }
 
-```
 if (notification.action_url) {
   router.push(notification.action_url);
   return;
 }
 
 await chargerNotifications();
-```
 
 }
 
@@ -59,7 +55,6 @@ useEffect(() => {
 let isMounted = true;
 let channel: ReturnType<typeof supabase.channel> | null = null;
 
-```
 async function initRealtime() {
   const {
     data: { session },
@@ -98,14 +93,12 @@ return () => {
     supabase.removeChannel(channel);
   }
 };
-```
 
 }, []);
 
 return ( <AppShell> <div className="space-y-6"> <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl"> <h1 className="text-2xl font-semibold">Notifications</h1> <p className="mt-2 text-sm text-slate-400">
 Les nouvelles notifications apparaissent automatiquement. </p> </div>
 
-```
     {loading ? (
       <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-slate-400">
         Chargement...
@@ -161,7 +154,6 @@ Les nouvelles notifications apparaissent automatiquement. </p> </div>
     )}
   </div>
 </AppShell>
-```
 
 );
 }
