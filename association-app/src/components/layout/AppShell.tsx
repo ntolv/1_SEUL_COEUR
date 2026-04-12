@@ -20,10 +20,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 const pathname = usePathname();
 const [menuOpen, setMenuOpen] = useState(false);
 
-return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hidden">
+return ( <div className="min-h-screen w-full bg-[#020617] text-white">
 
-`
-  {/* 🌌 BACKGROUND GLOBAL PRO++ */}
+```
+  {/* BACKGROUND */}
   <div className="fixed inset-0 -z-10">
     <div className="absolute inset-0 bg-[#020617]" />
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.15),transparent_30%)]" />
@@ -32,7 +32,7 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hi
 
   <div className="flex min-h-screen w-full">
 
-    {/* 🧭 SIDEBAR DESKTOP */}
+    {/* SIDEBAR DESKTOP */}
     <aside className="hidden lg:flex w-72 flex-col border-r border-white/10 bg-slate-950/80 backdrop-blur-xl">
       <div className="p-6 text-lg font-semibold">UN SEUL COEUR</div>
 
@@ -57,7 +57,7 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hi
       </nav>
     </aside>
 
-    {/* 📱 OVERLAY MOBILE */}
+    {/* MOBILE OVERLAY */}
     {menuOpen && (
       <div
         className="fixed inset-0 z-40 bg-black/60"
@@ -65,7 +65,7 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hi
       />
     )}
 
-    {/* 📱 SIDEBAR MOBILE */}
+    {/* SIDEBAR MOBILE */}
     <aside
       className={
         "fixed z-50 inset-y-0 left-0 w-72 bg-slate-950 p-4 transform transition lg:hidden " +
@@ -84,7 +84,7 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hi
       ))}
     </aside>
 
-    {/* 🧠 CONTENU */}
+    {/* CONTENU */}
     <div className="flex-1 flex flex-col min-h-screen w-full">
 
       {/* HEADER */}
@@ -93,9 +93,7 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hi
           ☰
         </button>
 
-        <div className="font-semibold tracking-tight">
-          Interface PRO++
-        </div>
+        <div className="font-semibold">Interface PRO++</div>
 
         <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 text-black font-bold">
           USC
@@ -110,7 +108,7 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white overflow-hi
     </div>
   </div>
 </div>
-`
+```
 
 );
 }
