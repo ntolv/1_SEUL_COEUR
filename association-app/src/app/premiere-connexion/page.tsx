@@ -14,6 +14,7 @@ export default function Page() {
   const [preinscriptionId, setPreinscriptionId] = useState<string | null>(null);
   const [membreNom, setMembreNom] = useState("");
   const [isRecognized, setIsRecognized] = useState(false);
+  const [hasTriedLookup, setHasTriedLookup] = useState(false);
   const [message, setMessage] = useState("");
 
   const [loadingLookup, setLoadingLookup] = useState(false);
@@ -28,6 +29,7 @@ export default function Page() {
       setMembreNom("");
       setEmail("");
       setPassword("");
+      setHasTriedLookup(true);
 
       const tel = telephone.trim();
 
@@ -53,14 +55,18 @@ export default function Page() {
       }
 
       if (result.code !== "OK") {
-        setMessage(result.message || "Membre préinscrit non reconnu.");
+        setMessage(
+          "Préinscription non trouvée. Si vous avez déjà terminé votre première connexion, saisissez votre email et votre mot de passe pour accéder directement à l’accueil."
+        );
         return;
       }
 
       setPreinscriptionId(result.id);
       setMembreNom(result.nom_complet || "");
       setIsRecognized(true);
-      setMessage("Préinscrit reconnu. Veuillez maintenant saisir votre email et créer votre mot de passe.");
+      setMessage(
+        "Préinscrit reconnu. Veuillez maintenant saisir votre email et créer votre mot de passe."
+      );
     } catch (err: any) {
       setMessage(err?.message || "Erreur lors de la vérification.");
     } finally {
@@ -73,10 +79,6 @@ export default function Page() {
       setLoadingCreate(true);
       setMessage("");
 
-      if (!isRecognized || !preinscriptionId) {
-        throw new Error("Veuillez d'abord vérifier le téléphone.");
-      }
-
       if (!email.trim()) {
         throw new Error("Veuillez saisir votre email.");
       }
@@ -87,48 +89,111 @@ export default function Page() {
 
       const finalEmail = email.trim().toLowerCase();
 
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      // 1. Tentative de connexion directe d'abord
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: finalEmail,
+          password,
+        });
+
+      if (!signInError && signInData.session) {
+        // Cas utilisateur déjà créé auparavant : accès direct accueil
+        if (!preinscriptionId) {
+          router.replace("/");
+          router.refresh();
+          return;
+        }
+
+        // Cas reconnu + compte déjà existant : on tente la finalisation,
+        // mais si elle a déjà été faite, on laisse passer vers l'accueil
+        const { data: finalizeData, error: finalizeError } = await supabase.rpc(
+          "fn_membre_finaliser_premiere_connexion",
+          { p_membre_id: preinscriptionId }
+        );
+
+        if (finalizeError) {
+          const msg = (finalizeError.message || "").toLowerCase();
+
+          if (
+            msg.includes("préinscription introuvable") ||
+            msg.includes("preinscription introuvable")
+          ) {
+            router.replace("/");
+            router.refresh();
+            return;
+          }
+
+          throw new Error(finalizeError.message);
+        }
+
+        const result = Array.isArray(finalizeData)
+          ? finalizeData[0]
+          : finalizeData;
+
+        if (!result) {
+          router.replace("/");
+          router.refresh();
+          return;
+        }
+
+        if (
+          result.code === "OK" ||
+          result.code === "ALREADY_DONE"
+        ) {
+          router.replace("/");
+          router.refresh();
+          return;
+        }
+
+        router.replace("/");
+        router.refresh();
+        return;
+      }
+
+      // 2. Si la connexion échoue et qu'on n'a pas de préinscription reconnue,
+      // on ne crée pas de compte à l'aveugle
+      if (!isRecognized || !preinscriptionId) {
+        throw new Error(
+          "Compte non reconnu avec ces identifiants. Vérifiez votre email et votre mot de passe, ou recommencez la vérification du téléphone."
+        );
+      }
+
+      // 3. Préinscription reconnue : création du compte Auth
+      const { error: signUpError } = await supabase.auth.signUp({
         email: finalEmail,
         password,
       });
 
       if (signUpError) {
-        if (signUpError.message.toLowerCase().includes("already registered")) {
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: finalEmail,
-            password,
-          });
+        const signUpMsg = (signUpError.message || "").toLowerCase();
 
-          if (signInError) {
-            throw new Error(signInError.message);
-          }
-        } else {
-          throw new Error(signUpError.message);
+        if (
+          signUpMsg.includes("already registered") ||
+          signUpMsg.includes("already exists") ||
+          signUpMsg.includes("user already registered")
+        ) {
+          throw new Error(
+            "Cet email est déjà utilisé avec un autre mot de passe. Saisissez le bon mot de passe pour accéder directement à l’accueil."
+          );
         }
-      } else {
-        const hasSessionAfterSignup = !!signUpData.session;
 
-        if (!hasSessionAfterSignup) {
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: finalEmail,
-            password,
-          });
-
-          if (signInError) {
-            throw new Error(signInError.message);
-          }
-        }
+        throw new Error(signUpError.message);
       }
 
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      // 4. Après création, connexion immédiate obligatoire
+      const { data: signInAfterSignUpData, error: signInAfterSignUpError } =
+        await supabase.auth.signInWithPassword({
+          email: finalEmail,
+          password,
+        });
 
-      if (sessionError || !session) {
-        throw new Error("Connexion impossible après création du compte.");
+      if (signInAfterSignUpError || !signInAfterSignUpData.session) {
+        throw new Error(
+          "Compte créé mais connexion impossible immédiatement."
+        );
       }
 
+      // 5. Finalisation métier
       const { data: finalizeData, error: finalizeError } = await supabase.rpc(
         "fn_membre_finaliser_premiere_connexion",
         { p_membre_id: preinscriptionId }
@@ -138,15 +203,16 @@ export default function Page() {
         throw new Error(finalizeError.message);
       }
 
-      const result = Array.isArray(finalizeData) ? finalizeData[0] : finalizeData;
+      const result = Array.isArray(finalizeData)
+        ? finalizeData[0]
+        : finalizeData;
 
       if (!result) {
         throw new Error("Réponse serveur invalide.");
       }
 
       if (result.code === "OK" || result.code === "ALREADY_DONE") {
-        setMessage("Activation réussie.");
-        router.push("/");
+        router.replace("/");
         router.refresh();
         return;
       }
@@ -169,7 +235,12 @@ export default function Page() {
   const isError =
     message.toLowerCase().includes("non reconnu") ||
     message.toLowerCase().includes("erreur") ||
-    message.toLowerCase().includes("invalide");
+    message.toLowerCase().includes("invalide") ||
+    message.toLowerCase().includes("impossible") ||
+    message.toLowerCase().includes("utilisé") ||
+    message.toLowerCase().includes("vérifiez");
+
+  const showCredentialsForm = isRecognized || hasTriedLookup;
 
   return (
     <div
@@ -300,7 +371,7 @@ export default function Page() {
           {loadingLookup ? "Recherche..." : "Vérifier mon numéro"}
         </button>
 
-        {isRecognized && (
+        {showCredentialsForm && (
           <>
             <div
               style={{
@@ -315,7 +386,9 @@ export default function Page() {
                 lineHeight: 1.5,
               }}
             >
-              Veuillez saisir votre email et créer votre mot de passe.
+              {isRecognized
+                ? "Veuillez saisir votre email et créer votre mot de passe."
+                : "Si vous avez déjà terminé votre première connexion, saisissez votre email et votre mot de passe existants pour accéder directement à l’accueil."}
             </div>
 
             <input
@@ -334,7 +407,7 @@ export default function Page() {
             />
 
             <input
-              placeholder="Mot de passe"
+              placeholder={isRecognized ? "Mot de passe" : "Mot de passe existant"}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -365,7 +438,11 @@ export default function Page() {
                 cursor: "pointer",
               }}
             >
-              {loadingCreate ? "Activation..." : "Activer mon compte"}
+              {loadingCreate
+                ? "Connexion..."
+                : isRecognized
+                ? "Activer mon compte"
+                : "Accéder à l’accueil"}
             </button>
           </>
         )}
