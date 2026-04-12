@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
@@ -39,6 +39,18 @@ function formatEuro(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} €`;
+}
+
+function formatMois(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("fr-FR", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function getWhatsappUrl(
@@ -333,115 +345,251 @@ export default function SuiviGlobalPage() {
               Aucun résultat trouvé
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b border-white/10">
-                  <tr className="text-left">
-                    <th className="px-6 py-4 text-sm font-medium text-slate-300">
-                      Personne
-                    </th>
-                    <th className="px-6 py-4 text-sm font-medium text-slate-300">
-                      Type
-                    </th>
-                    <th className="px-6 py-4 text-sm font-medium text-slate-300">
-                      Rubrique
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
-                      Attendu
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
-                      Encaissé
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
-                      Reste
-                    </th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
-                      Statut
-                    </th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {groupedRows.map((groupe) => (
-                    <React.Fragment key={groupe.personneId}>
-                      {groupe.rows.map((row, index) => (
-                        <tr
-                          key={`${row.personne_id}-${row.mois_reference}-${row.rubrique_id ?? row.rubrique_nom}-${index}`}
-                          className="hover:bg-white/5"
-                        >
-                          <td className="px-6 py-4">
-                            {index === 0 && (
-                              <div>
-                                <div className="font-medium text-white">
-                                  {groupe.nomComplet}
+            <>
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full">
+                  <thead className="border-b border-white/10">
+                    <tr className="text-left">
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
+                        Personne
+                      </th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
+                        Type
+                      </th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
+                        Rubrique
+                      </th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
+                        Attendu
+                      </th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
+                        Encaissé
+                      </th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
+                        Reste
+                      </th>
+                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
+                        Statut
+                      </th>
+                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {groupedRows.map((groupe) => (
+                      <React.Fragment key={groupe.personneId}>
+                        {groupe.rows.map((row, index) => (
+                          <tr
+                            key={`${row.personne_id}-${row.mois_reference}-${row.rubrique_id ?? row.rubrique_nom}-${index}`}
+                            className="hover:bg-white/5"
+                          >
+                            <td className="px-6 py-4">
+                              {index === 0 && (
+                                <div>
+                                  <div className="font-medium text-white">
+                                    {groupe.nomComplet}
+                                  </div>
+                                  <div className="text-sm text-slate-400">
+                                    {groupe.telephone}
+                                  </div>
                                 </div>
-                                <div className="text-sm text-slate-400">
-                                  {groupe.telephone}
-                                </div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {index === 0 && (
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {index === 0 && (
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                    groupe.typePersonne === "MEMBRE"
+                                      ? "bg-cyan-400/20 text-cyan-300"
+                                      : "bg-purple-400/20 text-purple-300"
+                                  }`}
+                                >
+                                  {groupe.typePersonne}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-white">
+                              {row.rubrique_nom}
+                            </td>
+                            <td className="px-6 py-4 text-right text-sm text-white">
+                              {formatEuro(Number(row.montant_attendu))}
+                            </td>
+                            <td className="px-6 py-4 text-right text-sm text-green-400">
+                              {formatEuro(Number(row.montant_encaisse))}
+                            </td>
+                            <td className="px-6 py-4 text-right text-sm text-orange-400">
+                              {formatEuro(Number(row.reste))}
+                            </td>
+                            <td className="px-6 py-4 text-center">
                               <span
                                 className={`inline-flex rounded-full px-2 py-1 text-xs ${
-                                  groupe.typePersonne === "MEMBRE"
-                                    ? "bg-cyan-400/20 text-cyan-300"
-                                    : "bg-purple-400/20 text-purple-300"
+                                  row.statut === "A jour"
+                                    ? "bg-green-400/20 text-green-300"
+                                    : "bg-red-400/20 text-red-300"
                                 }`}
                               >
-                                {groupe.typePersonne}
+                                {row.statut}
                               </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-white">
-                            {row.rubrique_nom}
-                          </td>
-                          <td className="px-6 py-4 text-right text-sm text-white">
-                            {formatEuro(Number(row.montant_attendu))}
-                          </td>
-                          <td className="px-6 py-4 text-right text-sm text-green-400">
-                            {formatEuro(Number(row.montant_encaisse))}
-                          </td>
-                          <td className="px-6 py-4 text-right text-sm text-orange-400">
-                            {formatEuro(Number(row.reste))}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs ${
-                                row.statut === "A jour"
-                                  ? "bg-green-400/20 text-green-300"
-                                  : "bg-red-400/20 text-red-300"
-                              }`}
-                            >
-                              {row.statut}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {index === 0 ? (
-                              groupe.whatsappUrl ? (
-                                <a
-                                  href={groupe.whatsappUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-green-500"
-                                >
-                                  WhatsApp
-                                </a>
-                              ) : (
-                                <span className="text-xs text-slate-500">—</span>
-                              )
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {index === 0 ? (
+                                groupe.whatsappUrl ? (
+                                  <a
+                                    href={groupe.whatsappUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-green-500"
+                                  >
+                                    WhatsApp
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-slate-500">—</span>
+                                )
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-4 p-4 lg:hidden">
+                {groupedRows.map((groupe) => {
+                  const totalAttenduPersonne = groupe.rows.reduce(
+                    (sum, row) => sum + Number(row.montant_attendu || 0),
+                    0
+                  );
+                  const totalEncaissePersonne = groupe.rows.reduce(
+                    (sum, row) => sum + Number(row.montant_encaisse || 0),
+                    0
+                  );
+                  const totalRestePersonne = groupe.rows.reduce(
+                    (sum, row) => sum + Number(row.reste || 0),
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={groupe.personneId}
+                      className="rounded-2xl border border-white/10 bg-slate-950/40 p-4 shadow-xl"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-lg font-semibold text-white">
+                            {groupe.nomComplet}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            {groupe.telephone || "Téléphone non renseigné"}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs ${
+                            groupe.typePersonne === "MEMBRE"
+                              ? "bg-cyan-400/20 text-cyan-300"
+                              : "bg-purple-400/20 text-purple-300"
+                          }`}
+                        >
+                          {groupe.typePersonne}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-slate-400">Attendu</div>
+                          <div className="mt-1 font-semibold text-white">
+                            {formatEuro(totalAttenduPersonne)}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-slate-400">Encaissé</div>
+                          <div className="mt-1 font-semibold text-green-400">
+                            {formatEuro(totalEncaissePersonne)}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-slate-400">Reste</div>
+                          <div className="mt-1 font-semibold text-orange-400">
+                            {formatEuro(totalRestePersonne)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        {groupe.whatsappUrl ? (
+                          <a
+                            href={groupe.whatsappUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-green-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-green-500"
+                          >
+                            Envoyer sur WhatsApp
+                          </a>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-white/10 px-4 py-3 text-center text-sm text-slate-500">
+                            Aucun numéro exploitable ou aucun retard à notifier
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {groupe.rows.map((row, index) => (
+                          <div
+                            key={`${row.personne_id}-${row.mois_reference}-${row.rubrique_id ?? row.rubrique_nom}-${index}`}
+                            className="rounded-xl border border-white/10 bg-white/5 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-white">
+                                  {row.rubrique_nom}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-400">
+                                  {formatMois(row.mois_reference)}
+                                </div>
+                              </div>
+
+                              <span
+                                className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                  row.statut === "A jour"
+                                    ? "bg-green-400/20 text-green-300"
+                                    : "bg-red-400/20 text-red-300"
+                                }`}
+                              >
+                                {row.statut}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                              <div className="rounded-lg bg-slate-900/60 p-2">
+                                <div className="text-[11px] text-slate-400">Attendu</div>
+                                <div className="mt-1 text-white">
+                                  {formatEuro(Number(row.montant_attendu))}
+                                </div>
+                              </div>
+                              <div className="rounded-lg bg-slate-900/60 p-2">
+                                <div className="text-[11px] text-slate-400">Encaissé</div>
+                                <div className="mt-1 text-green-400">
+                                  {formatEuro(Number(row.montant_encaisse))}
+                                </div>
+                              </div>
+                              <div className="rounded-lg bg-slate-900/60 p-2">
+                                <div className="text-[11px] text-slate-400">Reste</div>
+                                <div className="mt-1 text-orange-400">
+                                  {formatEuro(Number(row.reste))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

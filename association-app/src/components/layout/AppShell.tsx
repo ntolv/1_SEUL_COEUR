@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,6 +16,7 @@ const liensBase = [
   { href: "/membres", label: "Membres" },
   { href: "/encaissements", label: "Encaissements" },
   { href: "/situation-globale", label: "Situation globale" },
+  { href: "/suivi-global", label: "Suivi global" },
   { href: "/prets", label: "Prêts" },
   { href: "/investissements", label: "Investissements" },
   { href: "/notifications", label: "Notifications" }
@@ -143,13 +144,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-                          <a
-                  href="/suivi-global"
-                  className="block rounded-xl px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
-                >
-                  Suivi global
-                </a>
-</nav>
+          </nav>
         </aside>
 
         {menuOpen && (
@@ -168,24 +163,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mb-4 text-lg font-semibold">UN SEUL COEUR</div>
 
           <div className="space-y-2">
-            {liens.map((lien) => (
-              <Link
-                key={lien.href}
-                href={lien.href}
-                onClick={() => setMenuOpen(false)}
-                className="block rounded-xl px-4 py-3 text-white hover:bg-white/5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span>{lien.label}</span>
+            {liens.map((lien) => {
+              const active = pathname === lien.href;
 
-                  {lien.href === "/notifications" && count > 0 && (
-                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
-                      {count}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            ))}
+              return (
+                <Link
+                  key={lien.href}
+                  href={lien.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={
+                    "block rounded-xl px-4 py-3 transition " +
+                    (active
+                      ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
+                      : "text-white hover:bg-white/5")
+                  }
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span>{lien.label}</span>
+
+                    {lien.href === "/notifications" && count > 0 && (
+                      <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+                        {count}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </aside>
 
@@ -218,4 +222,3 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
