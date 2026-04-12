@@ -1,8 +1,21 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+
+type Preinscription = {
+  id: string;
+  nom_complet: string | null;
+  telephone: string | null;
+  email: string | null;
+  membre_id: string | null;
+  statut_actif: boolean | null;
+};
+
+function normalizePhone(value: string) {
+  return (value ?? "").replace(/[^\d+]/g, "").trim();
+}
 
 export default function Page() {
   const router = useRouter();
@@ -10,67 +23,133 @@ export default function Page() {
   const [telephone, setTelephone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [membreId, setMembreId] = useState<string | null>(null);
+  const [membreNom, setMembreNom] = useState("");
   const [message, setMessage] = useState("");
 
+  const [loadingLookup, setLoadingLookup] = useState(false);
+  const [loadingCreate, setLoadingCreate] = useState(false);
+
+  const normalizedTelephone = useMemo(
+    () => normalizePhone(telephone),
+    [telephone]
+  );
+
+  // 🔍 RECHERCHE DU PRÉINSCRIT
+  async function handleLookup() {
+    try {
+      setLoadingLookup(true);
+      setMessage("");
+      setMembreId(null);
+      setMembreNom("");
+
+      if (!normalizedTelephone) {
+        setMessage("Veuillez saisir un téléphone.");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("membres_preinscriptions")
+        .select(
+          "id, nom_complet, telephone, email, membre_id, statut_actif"
+        )
+        .eq("telephone", normalizedTelephone)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      const row = data as Preinscription | null;
+
+      if (!row) {
+        setMessage("Préinscrit non reconnu.");
+        return;
+      }
+
+      if (!row.statut_actif) {
+        setMessage("Préinscription inactive.");
+        return;
+      }
+
+      setMembreNom(row.nom_complet || "");
+      setEmail((prev) => prev || row.email || "");
+
+      if (!row.membre_id) {
+        setMessage(
+          "Préinscription trouvée mais aucun membre lié. Contacte l’admin."
+        );
+        return;
+      }
+
+      setMembreId(row.membre_id);
+      setMessage("Membre reconnu");
+    } catch (err: any) {
+      setMessage(err.message);
+    } finally {
+      setLoadingLookup(false);
+    }
+  }
+
+  // 🚀 ACTIVATION
   async function handleCreateAccount() {
     try {
-      setMessage("Création du compte...");
+      setLoadingCreate(true);
+      setMessage("");
 
-      const finalEmail = email;
-      const finalPassword = password;
+      if (!membreId) {
+        throw new Error("Veuillez d'abord vérifier le téléphone.");
+      }
+
+      if (!email || !password) {
+        throw new Error("Email et mot de passe requis.");
+      }
+
+      const finalEmail = email.trim().toLowerCase();
 
       // SIGNUP
       const { data: signUpData, error: signUpError } =
         await supabase.auth.signUp({
           email: finalEmail,
-          password: finalPassword,
+          password,
         });
 
-      if (signUpError) {
-        throw new Error(signUpError.message);
-      }
+      if (signUpError) throw new Error(signUpError.message);
 
-      // CAS déjà existant → login auto
+      // CAS déjà existant
       if (signUpData.user === null) {
         const { error: signInError } =
           await supabase.auth.signInWithPassword({
             email: finalEmail,
-            password: finalPassword,
+            password,
           });
 
-        if (signInError) {
-          throw new Error(signInError.message);
-        }
+        if (signInError) throw new Error(signInError.message);
       }
 
-      // Vérifier session
+      // SESSION
       const {
         data: { session },
-        error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError || !session) {
-        throw new Error("Session invalide après authentification");
+      if (!session) {
+        throw new Error("Session invalide.");
       }
 
-      // FINALISATION
+      // FINALISATION BACKEND
       const { data: finalizeData, error: finalizeError } =
         await supabase.rpc(
           "fn_membre_finaliser_premiere_connexion",
           { p_membre_id: membreId }
         );
 
-      if (finalizeError) {
-        throw new Error(finalizeError.message);
-      }
+      if (finalizeError) throw new Error(finalizeError.message);
 
       const result = Array.isArray(finalizeData)
         ? finalizeData[0]
         : finalizeData;
 
       if (!result) {
-        throw new Error("Réponse serveur invalide");
+        throw new Error("Réponse serveur invalide.");
       }
 
       if (result.code === "OK" || result.code === "ALREADY_DONE") {
@@ -81,26 +160,42 @@ export default function Page() {
       }
 
       throw new Error(result.message || "Erreur inconnue");
-
     } catch (err: any) {
       setMessage(err.message);
+    } finally {
+      setLoadingCreate(false);
     }
   }
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, maxWidth: 500, margin: "auto" }}>
       <h1>Première connexion</h1>
 
       <input
         placeholder="Téléphone"
         value={telephone}
         onChange={(e) => setTelephone(e.target.value)}
+        onBlur={handleLookup}
+        style={{ display: "block", marginBottom: 10 }}
       />
+
+      <button onClick={handleLookup}>
+        {loadingLookup ? "Recherche..." : "Vérifier"}
+      </button>
+
+      <p>
+        <strong>
+          {membreNom
+            ? `Membre reconnu : ${membreNom}`
+            : "Membre non reconnu"}
+        </strong>
+      </p>
 
       <input
         placeholder="Email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        style={{ display: "block", marginBottom: 10 }}
       />
 
       <input
@@ -108,10 +203,11 @@ export default function Page() {
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        style={{ display: "block", marginBottom: 10 }}
       />
 
       <button onClick={handleCreateAccount}>
-        Activer mon compte
+        {loadingCreate ? "Activation..." : "Activer mon compte"}
       </button>
 
       <p>{message}</p>
