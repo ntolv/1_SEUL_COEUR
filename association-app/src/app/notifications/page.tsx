@@ -22,7 +22,6 @@ const [loading, setLoading] = useState(true);
 async function charger() {
 setLoading(true);
 
-```
 const { data, error } = await supabase
   .from("v_notifications_me")
   .select("*")
@@ -33,7 +32,6 @@ if (!error && data) {
 }
 
 setLoading(false);
-```
 
 }
 
@@ -42,14 +40,12 @@ await supabase.rpc("fn_notification_marquer_lue", {
 p_notification_id: n.id,
 });
 
-```
 if (n.action_url) {
   router.push(n.action_url);
   return;
 }
 
 await charger();
-```
 
 }
 
@@ -59,7 +55,6 @@ charger();
 
 return ( <AppShell> <div className="space-y-6"> <h1 className="text-2xl font-semibold">Notifications</h1>
 
-```
     {loading ? (
       <div className="text-slate-400">Chargement...</div>
     ) : notifications.length === 0 ? (
