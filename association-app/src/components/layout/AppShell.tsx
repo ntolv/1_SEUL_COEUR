@@ -143,7 +143,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-          </nav>
+                          <a
+                  href="/suivi-global"
+                  className="block rounded-xl px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  Suivi global
+                </a>
+</nav>
         </aside>
 
         {menuOpen && (
@@ -212,3 +218,4 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+

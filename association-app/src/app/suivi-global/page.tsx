@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
@@ -32,6 +32,52 @@ function normalize(value: string | null | undefined) {
 function getMonthTime(value: string) {
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
+}
+
+function formatEuro(value: number) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
+}
+
+function getWhatsappUrl(
+  nomComplet: string,
+  telephone: string | null,
+  rows: EncaissementRow[]
+) {
+  const numero = (telephone ?? "").replace(/\D/g, "");
+
+  if (!numero) {
+    return null;
+  }
+
+  const lignesRetard = rows.filter((row) => Number(row.reste || 0) > 0);
+
+  if (lignesRetard.length === 0) {
+    return null;
+  }
+
+  const totalReste = lignesRetard.reduce(
+    (sum, row) => sum + Number(row.reste || 0),
+    0
+  );
+
+  const details = lignesRetard
+    .map((row) => `${row.rubrique_nom} : ${formatEuro(Number(row.reste || 0))}`)
+    .join("\n");
+
+  const message = `Bonjour ${nomComplet},
+
+Vous avez actuellement un retard de paiement :
+
+${details}
+
+Montant total restant : ${formatEuro(totalReste)}
+
+Merci.`;
+
+  return `https://wa.me/${numero}?text=${encodeURIComponent(message)}`;
 }
 
 export default function SuiviGlobalPage() {
@@ -122,6 +168,11 @@ export default function SuiviGlobalPage() {
       telephone: personRows[0].telephone,
       email: personRows[0].email,
       typePersonne: personRows[0].type_personne,
+      whatsappUrl: getWhatsappUrl(
+        personRows[0].nom_complet,
+        personRows[0].telephone,
+        personRows
+      ),
       rows: [...personRows].sort((a, b) => {
         const aTime = getMonthTime(a.mois_reference);
         const bTime = getMonthTime(b.mois_reference);
@@ -239,21 +290,21 @@ export default function SuiviGlobalPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
             <div className="text-sm text-slate-400">Total attendu</div>
             <div className="mt-2 text-2xl font-bold text-white">
-              {stats.totalAttendu.toLocaleString()} FCFA
+              {formatEuro(stats.totalAttendu)}
             </div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
             <div className="text-sm text-slate-400">Total encaissé</div>
             <div className="mt-2 text-2xl font-bold text-green-400">
-              {stats.totalEncaisse.toLocaleString()} FCFA
+              {formatEuro(stats.totalEncaisse)}
             </div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
             <div className="text-sm text-slate-400">Reste à payer</div>
             <div className="mt-2 text-2xl font-bold text-orange-400">
-              {stats.totalReste.toLocaleString()} FCFA
+              {formatEuro(stats.totalReste)}
             </div>
           </div>
 
@@ -307,6 +358,9 @@ export default function SuiviGlobalPage() {
                     <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
                       Statut
                     </th>
+                    <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -346,13 +400,13 @@ export default function SuiviGlobalPage() {
                             {row.rubrique_nom}
                           </td>
                           <td className="px-6 py-4 text-right text-sm text-white">
-                            {Number(row.montant_attendu).toLocaleString()} FCFA
+                            {formatEuro(Number(row.montant_attendu))}
                           </td>
                           <td className="px-6 py-4 text-right text-sm text-green-400">
-                            {Number(row.montant_encaisse).toLocaleString()} FCFA
+                            {formatEuro(Number(row.montant_encaisse))}
                           </td>
                           <td className="px-6 py-4 text-right text-sm text-orange-400">
-                            {Number(row.reste).toLocaleString()} FCFA
+                            {formatEuro(Number(row.reste))}
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span
@@ -364,6 +418,22 @@ export default function SuiviGlobalPage() {
                             >
                               {row.statut}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {index === 0 ? (
+                              groupe.whatsappUrl ? (
+                                <a
+                                  href={groupe.whatsappUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-green-500"
+                                >
+                                  WhatsApp
+                                </a>
+                              ) : (
+                                <span className="text-xs text-slate-500">—</span>
+                              )
+                            ) : null}
                           </td>
                         </tr>
                       ))}
