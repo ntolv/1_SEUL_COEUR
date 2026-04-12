@@ -41,9 +41,6 @@ export default function Page() {
         { p_telephone: tel }
       );
 
-      console.log("LOOKUP RPC ERROR =", error);
-      console.log("LOOKUP RPC DATA =", data);
-
       if (error) {
         throw new Error(error.message);
       }
@@ -65,7 +62,6 @@ export default function Page() {
       setIsRecognized(true);
       setMessage("Préinscrit reconnu. Veuillez maintenant saisir votre email et créer votre mot de passe.");
     } catch (err: any) {
-      console.log("LOOKUP EXCEPTION =", err);
       setMessage(err?.message || "Erreur lors de la vérification.");
     } finally {
       setLoadingLookup(false);
@@ -97,35 +93,46 @@ export default function Page() {
       });
 
       if (signUpError) {
-        throw new Error(signUpError.message);
-      }
+        if (signUpError.message.toLowerCase().includes("already registered")) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: finalEmail,
+            password,
+          });
 
-      if (signUpData.user === null) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: finalEmail,
-          password,
-        });
+          if (signInError) {
+            throw new Error(signInError.message);
+          }
+        } else {
+          throw new Error(signUpError.message);
+        }
+      } else {
+        const hasSessionAfterSignup = !!signUpData.session;
 
-        if (signInError) {
-          throw new Error(signInError.message);
+        if (!hasSessionAfterSignup) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: finalEmail,
+            password,
+          });
+
+          if (signInError) {
+            throw new Error(signInError.message);
+          }
         }
       }
 
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (!session) {
-        throw new Error("Session invalide.");
+      if (sessionError || !session) {
+        throw new Error("Connexion impossible après création du compte.");
       }
 
       const { data: finalizeData, error: finalizeError } = await supabase.rpc(
         "fn_membre_finaliser_premiere_connexion",
         { p_membre_id: preinscriptionId }
       );
-
-      console.log("FINALIZE RPC ERROR =", finalizeError);
-      console.log("FINALIZE RPC DATA =", finalizeData);
 
       if (finalizeError) {
         throw new Error(finalizeError.message);
@@ -138,6 +145,7 @@ export default function Page() {
       }
 
       if (result.code === "OK" || result.code === "ALREADY_DONE") {
+        setMessage("Activation réussie.");
         router.push("/");
         router.refresh();
         return;
