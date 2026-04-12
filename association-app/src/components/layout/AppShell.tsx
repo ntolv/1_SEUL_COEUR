@@ -108,7 +108,6 @@ return ( <div className="min-h-screen w-full bg-[#020617] text-white">
     </div>
   </div>
 </div>
-```
 
 );
 }
