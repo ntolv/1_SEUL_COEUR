@@ -31,43 +31,61 @@ export default function LoginPage() {
     setErreur("");
     setChargement(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: motDePasse,
-    });
+    try {
+      // ✅ LOGIN SUPABASE
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: motDePasse,
+      });
 
-    if (error) {
-      setChargement(false);
-      setErreur(error.message);
-      return;
-    }
+      if (error) {
+        setErreur(error.message);
+        return;
+      }
 
-    const { data: syncData, error: syncError } = await supabase.rpc(
-      "fn_membre_sync_connexion_courante"
-    );
+      let res: SyncResult | undefined;
 
-    setChargement(false);
+      // ✅ RPC NON BLOQUANTE
+      try {
+        const { data, error: syncError } = await supabase.rpc(
+          "fn_membre_sync_connexion_courante"
+        );
 
-    if (syncError) {
-      setErreur(syncError.message);
-      return;
-    }
+        if (syncError) {
+          console.warn(
+            "RPC fn_membre_sync_connexion_courante échouée:",
+            syncError.message
+          );
+        } else {
+          res = Array.isArray(data) ? data[0] : data;
 
-    const res: SyncResult | undefined = Array.isArray(syncData) ? syncData[0] : syncData;
+          if (res && res.code !== "OK") {
+            console.warn(
+              "Sync connexion courante non bloquante:",
+              res.message || res.code
+            );
+          }
+        }
+      } catch (rpcError) {
+        console.warn("Exception RPC:", rpcError);
+      }
 
-    if (!res || res.code !== "OK") {
-      setErreur(res?.message || "Connexion incomplète.");
-      return;
-    }
+      // ✅ REDIRECTION MOT DE PASSE SI NÉCESSAIRE
+      if (res?.doit_changer_mot_de_passe || res?.mot_de_passe_provisoire_actif) {
+        router.push("/page-accueil");
+        router.refresh();
+        return;
+      }
 
-    if (res.doit_changer_mot_de_passe || res.mot_de_passe_provisoire_actif) {
-      router.push("/changer-mot-de-passe");
+      // ✅ REDIRECTION NORMALE → PAGE D’ACCUEIL
+      router.push("/page-accueil"); // 🔥 adapte si ton chemin est différent
       router.refresh();
-      return;
-    }
 
-    router.push("/");
-    router.refresh();
+    } catch (e: any) {
+      setErreur(e?.message || "Erreur inattendue lors de la connexion.");
+    } finally {
+      setChargement(false);
+    }
   }
 
   return (
@@ -112,11 +130,11 @@ export default function LoginPage() {
             />
           </div>
 
-          {erreur ? (
+          {erreur && (
             <div className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">
               {erreur}
             </div>
-          ) : null}
+          )}
 
           <button
             type="submit"
@@ -136,4 +154,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
