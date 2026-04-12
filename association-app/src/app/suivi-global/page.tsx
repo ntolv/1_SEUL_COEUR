@@ -81,6 +81,7 @@ function getWhatsappUrl(
 
   const message = `Bonjour ${nomComplet},
 
+ASSOCIATION UN SEUL COEUR
 Vous avez actuellement un retard de paiement :
 
 ${details}
