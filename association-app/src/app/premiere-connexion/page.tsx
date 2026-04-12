@@ -8,8 +8,6 @@ type Preinscription = {
   id: string;
   nom_complet: string | null;
   telephone: string | null;
-  email: string | null;
-  membre_id: string | null;
   statut_actif: boolean | null;
 };
 
@@ -24,8 +22,9 @@ export default function Page() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [membreId, setMembreId] = useState<string | null>(null);
+  const [preinscriptionId, setPreinscriptionId] = useState<string | null>(null);
   const [membreNom, setMembreNom] = useState("");
+  const [isRecognized, setIsRecognized] = useState(false);
   const [message, setMessage] = useState("");
 
   const [loadingLookup, setLoadingLookup] = useState(false);
@@ -36,12 +35,13 @@ export default function Page() {
     [telephone]
   );
 
-  // 🔍 RECHERCHE DU PRÉINSCRIT
+  // 🔍 RECHERCHE
   async function handleLookup() {
     try {
       setLoadingLookup(true);
       setMessage("");
-      setMembreId(null);
+      setIsRecognized(false);
+      setPreinscriptionId(null);
       setMembreNom("");
 
       if (!normalizedTelephone) {
@@ -51,9 +51,7 @@ export default function Page() {
 
       const { data, error } = await supabase
         .from("membres_preinscriptions")
-        .select(
-          "id, nom_complet, telephone, email, membre_id, statut_actif"
-        )
+        .select("id, nom_complet, statut_actif")
         .eq("telephone", normalizedTelephone)
         .maybeSingle();
 
@@ -71,18 +69,16 @@ export default function Page() {
         return;
       }
 
+      // ✅ reconnu
+      setPreinscriptionId(row.id);
       setMembreNom(row.nom_complet || "");
-      setEmail((prev) => prev || row.email || "");
+      setIsRecognized(true);
 
-      if (!row.membre_id) {
-        setMessage(
-          "Préinscription trouvée mais aucun membre lié. Contacte l’admin."
-        );
-        return;
-      }
+      // 🔴 IMPORTANT : on vide les champs
+      setEmail("");
+      setPassword("");
 
-      setMembreId(row.membre_id);
-      setMessage("Membre reconnu");
+      setMessage("Préinscrit reconnu");
     } catch (err: any) {
       setMessage(err.message);
     } finally {
@@ -96,12 +92,12 @@ export default function Page() {
       setLoadingCreate(true);
       setMessage("");
 
-      if (!membreId) {
+      if (!isRecognized || !preinscriptionId) {
         throw new Error("Veuillez d'abord vérifier le téléphone.");
       }
 
       if (!email || !password) {
-        throw new Error("Email et mot de passe requis.");
+        throw new Error("Veuillez saisir email et mot de passe.");
       }
 
       const finalEmail = email.trim().toLowerCase();
@@ -115,7 +111,7 @@ export default function Page() {
 
       if (signUpError) throw new Error(signUpError.message);
 
-      // CAS déjà existant
+      // déjà existant → login
       if (signUpData.user === null) {
         const { error: signInError } =
           await supabase.auth.signInWithPassword({
@@ -126,7 +122,7 @@ export default function Page() {
         if (signInError) throw new Error(signInError.message);
       }
 
-      // SESSION
+      // session
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -135,11 +131,11 @@ export default function Page() {
         throw new Error("Session invalide.");
       }
 
-      // FINALISATION BACKEND
+      // 🔥 BACKEND
       const { data: finalizeData, error: finalizeError } =
         await supabase.rpc(
           "fn_membre_finaliser_premiere_connexion",
-          { p_membre_id: membreId }
+          { p_preinscription_id: preinscriptionId }
         );
 
       if (finalizeError) throw new Error(finalizeError.message);
@@ -153,7 +149,6 @@ export default function Page() {
       }
 
       if (result.code === "OK" || result.code === "ALREADY_DONE") {
-        setMessage("Activation réussie");
         router.push("/");
         router.refresh();
         return;
@@ -171,6 +166,7 @@ export default function Page() {
     <div style={{ padding: 20, maxWidth: 500, margin: "auto" }}>
       <h1>Première connexion</h1>
 
+      {/* TELEPHONE */}
       <input
         placeholder="Téléphone"
         value={telephone}
@@ -183,32 +179,38 @@ export default function Page() {
         {loadingLookup ? "Recherche..." : "Vérifier"}
       </button>
 
+      {/* RESULTAT */}
       <p>
         <strong>
-          {membreNom
+          {isRecognized
             ? `Membre reconnu : ${membreNom}`
-            : "Membre non reconnu"}
+            : "Aucun membre reconnu"}
         </strong>
       </p>
 
-      <input
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ display: "block", marginBottom: 10 }}
-      />
+      {/* FORMULAIRE UNIQUEMENT SI RECONNU */}
+      {isRecognized && (
+        <>
+          <input
+            placeholder="Saisir votre email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ display: "block", marginBottom: 10 }}
+          />
 
-      <input
-        placeholder="Mot de passe"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ display: "block", marginBottom: 10 }}
-      />
+          <input
+            placeholder="Créer un mot de passe"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ display: "block", marginBottom: 10 }}
+          />
 
-      <button onClick={handleCreateAccount}>
-        {loadingCreate ? "Activation..." : "Activer mon compte"}
-      </button>
+          <button onClick={handleCreateAccount}>
+            {loadingCreate ? "Activation..." : "Activer mon compte"}
+          </button>
+        </>
+      )}
 
       <p>{message}</p>
     </div>
