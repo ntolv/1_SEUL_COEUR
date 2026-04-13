@@ -1,203 +1,182 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { supabase } from "@/lib/supabaseClient";
 
-type MembreOption = {
-id: string;
-nom_complet: string;
+type NotificationItem = {
+  id: string;
+  titre: string;
+  message: string;
+  lu: boolean;
+  created_at: string;
+  action_url: string | null;
 };
 
-export default function AdminNotificationsPage() {
-const [mode, setMode] = useState<"TOUS" | "UN">("TOUS");
-const [membres, setMembres] = useState<MembreOption[]>([]);
-const [membreId, setMembreId] = useState("");
-const [titre, setTitre] = useState("");
-const [message, setMessage] = useState("");
-const [type, setType] = useState("INFO");
-const [actionUrl, setActionUrl] = useState("");
-const [chargement, setChargement] = useState(false);
-const [retour, setRetour] = useState("");
+export default function NotificationsPage() {
+  const router = useRouter();
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-async function chargerMembres() {
-const { data, error } = await supabase
-.from("membres")
-.select("id, nom_complet")
-.eq("statut_actif", true)
-.order("nom_complet", { ascending: true });
+  async function chargerNotifications() {
+    setLoading(true);
 
-  if (!error && data) {
-    setMembres(data as MembreOption[]);
+    const { data, error } = await supabase
+      .from("v_notifications_me")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setNotifications(data as NotificationItem[]);
+    }
+
+    setLoading(false);
   }
-}
 
-chargerMembres();
+  async function handleNotificationClick(notification: NotificationItem) {
+    if (!notification.lu) {
+      await supabase.rpc("fn_notification_marquer_lue", {
+        p_notification_id: notification.id,
+      });
+    }
 
-}, []);
+    if (notification.action_url) {
+      router.push(notification.action_url);
+      return;
+    }
 
-async function envoyerNotification() {
-setRetour("");
-
-if (!titre.trim()) {
-  setRetour("Le titre est obligatoire.");
-  return;
-}
-
-if (!message.trim()) {
-  setRetour("Le message est obligatoire.");
-  return;
-}
-
-if (mode === "UN" && !membreId) {
-  setRetour("Sélectionne un membre.");
-  return;
-}
-
-setChargement(true);
-
-if (mode === "TOUS") {
-  const { data, error } = await supabase.rpc("fn_notification_envoyer_a_tous", {
-    p_titre: titre.trim(),
-    p_message: message.trim(),
-    p_type: type,
-    p_source_module: "ADMIN",
-    p_source_id: null,
-    p_action_url: actionUrl.trim() || null,
-    p_data: {},
-  });
-
-  if (error) {
-    setRetour(error.message);
-  } else {
-    setRetour(`Notification envoyée à tous. Total: ${data?.total ?? 0}`);
-    setTitre("");
-    setMessage("");
-    setActionUrl("");
+    await chargerNotifications();
   }
-} else {
-  const { error } = await supabase.rpc("fn_notification_envoyer_a_un_membre", {
-    p_membre_id: membreId,
-    p_titre: titre.trim(),
-    p_message: message.trim(),
-    p_type: type,
-    p_source_module: "ADMIN",
-    p_source_id: null,
-    p_action_url: actionUrl.trim() || null,
-    p_data: {},
-  });
 
-  if (error) {
-    setRetour(error.message);
-  } else {
-    setRetour("Notification envoyée au membre.");
-    setTitre("");
-    setMessage("");
-    setActionUrl("");
-    setMembreId("");
+  async function handleActionClick(
+    event: React.MouseEvent<HTMLAnchorElement>,
+    notification: NotificationItem
+  ) {
+    event.stopPropagation();
+
+    if (!notification.lu) {
+      await supabase.rpc("fn_notification_marquer_lue", {
+        p_notification_id: notification.id,
+      });
+    }
   }
-}
 
-setChargement(false);
+  useEffect(() => {
+    let isMounted = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-}
+    async function initRealtime() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-return ( <AppShell> <div className="space-y-6"> <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl"> <h1 className="text-2xl font-semibold">Envoi de notifications</h1> <p className="mt-2 text-sm text-slate-400">
-Envoi manuel admin vers tous les membres ou un membre précis. </p> </div>
+      const membreId = session?.user?.id;
 
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-sm text-slate-300">Mode d’envoi</label>
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as "TOUS" | "UN")}
-            className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-          >
-            <option value="TOUS">Tous les membres</option>
-            <option value="UN">Un seul membre</option>
-          </select>
+      await chargerNotifications();
+
+      if (!isMounted || !membreId) {
+        return;
+      }
+
+      channel = supabase
+        .channel("notifications-page-realtime")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `membre_id=eq.${membreId}`,
+          },
+          async () => {
+            await chargerNotifications();
+          }
+        )
+        .subscribe();
+    }
+
+    initRealtime();
+
+    return () => {
+      isMounted = false;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, []);
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <h1 className="text-2xl font-semibold">Notifications</h1>
+          <p className="mt-2 text-sm text-slate-400">
+            Les nouvelles notifications apparaissent automatiquement.
+          </p>
         </div>
 
-        {mode === "UN" && (
-          <div>
-            <label className="mb-2 block text-sm text-slate-300">Membre</label>
-            <select
-              value={membreId}
-              onChange={(e) => setMembreId(e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-            >
-              <option value="">Sélectionner</option>
-              {membres.map((membre) => (
-                <option key={membre.id} value={membre.id}>
-                  {membre.nom_complet}
-                </option>
-              ))}
-            </select>
+        {loading ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-slate-400">
+            Chargement...
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-slate-400">
+            Aucune notification.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {notifications.map((notification) => (
+              <button
+                key={notification.id}
+                type="button"
+                onClick={() => handleNotificationClick(notification)}
+                className={
+                  "w-full rounded-2xl border p-4 text-left transition " +
+                  (notification.lu
+                    ? "border-white/10 bg-white/5 hover:bg-white/10"
+                    : "border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/15")
+                }
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-white">
+                      {notification.titre}
+                    </div>
+
+                    <div className="mt-2 whitespace-pre-line text-sm text-slate-300">
+                      {notification.message}
+                    </div>
+
+                    <div className="mt-3 text-xs text-slate-500">
+                      {new Date(notification.created_at).toLocaleString("fr-FR")}
+                    </div>
+
+                    {notification.action_url && (
+                      <div className="mt-4">
+                        <Link
+                          href={notification.action_url}
+                          onClick={(event) => handleActionClick(event, notification)}
+                          className="inline-flex items-center rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/20"
+                        >
+                          Ouvrir l’action
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+
+                  {!notification.lu && (
+                    <div className="shrink-0 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-xs text-cyan-200">
+                      Nouveau
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
           </div>
         )}
-
-        <div>
-          <label className="mb-2 block text-sm text-slate-300">Type</label>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-          >
-            <option value="INFO">INFO</option>
-            <option value="ALERTE">ALERTE</option>
-            <option value="ACTION">ACTION</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm text-slate-300">Action URL</label>
-          <input
-            value={actionUrl}
-            onChange={(e) => setActionUrl(e.target.value)}
-            placeholder="/notifications ou /encaissements"
-            className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-          />
-        </div>
       </div>
-
-      <div className="mt-4">
-        <label className="mb-2 block text-sm text-slate-300">Titre</label>
-        <input
-          value={titre}
-          onChange={(e) => setTitre(e.target.value)}
-          className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-        />
-      </div>
-
-      <div className="mt-4">
-        <label className="mb-2 block text-sm text-slate-300">Message</label>
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          rows={6}
-          className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-        />
-      </div>
-
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={envoyerNotification}
-          disabled={chargement}
-          className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 text-sm font-medium text-cyan-200 transition hover:bg-cyan-400/20 disabled:opacity-60"
-        >
-          {chargement ? "Envoi..." : "Envoyer la notification"}
-        </button>
-
-        {retour ? (
-          <div className="text-sm text-slate-300">{retour}</div>
-        ) : null}
-      </div>
-    </div>
-  </div>
-</AppShell>
-
-);
+    </AppShell>
+  );
 }
