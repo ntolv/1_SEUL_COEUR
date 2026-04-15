@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -15,11 +15,12 @@ const liensBase = [
   { href: "/synthese-caisse", label: "Synthèse caisse" },
   { href: "/membres", label: "Membres" },
   { href: "/encaissements", label: "Encaissements" },
-  { href: "/situation-globale", label: "Situation globale" },
+  { href: "/suivi-caisse-session", label: "Suivi caisse session" },
   { href: "/suivi-global", label: "Suivi global" },
   { href: "/prets", label: "Prêts" },
   { href: "/investissements", label: "Investissements" },
-  { href: "/notifications", label: "Notifications" }
+  { href: "/notifications", label: "Notifications" },
+  { href: "/documentation", label: "Documentation" }
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -28,10 +29,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [count, setCount] = useState(0);
   const [role, setRole] = useState<string>("");
 
+  const roleUpper = String(role || "").toUpperCase();
+  const canAccessDecaissements =
+    roleUpper === "ADMIN" ||
+    roleUpper === "PRESIDENT" ||
+    roleUpper === "TRESORIER";
+
   const liens = useMemo(() => {
     const items = [...liensBase];
 
-    if (role === "ADMIN") {
+    if (canAccessDecaissements) {
+      items.push({
+        href: "/decaissements",
+        label: "Décaissements",
+      });
+    }
+
+    if (roleUpper === "ADMIN") {
       items.push({
         href: "/admin-notifications",
         label: "Admin notifications",
@@ -39,7 +53,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     return items;
-  }, [role]);
+  }, [canAccessDecaissements, roleUpper]);
 
   async function loadCount() {
     const { data } = await supabase

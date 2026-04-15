@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+﻿import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -117,6 +117,11 @@ export default async function PageAccueil() {
             lien: "/notifications",
             icone: "notifications",
             description: "Centre de notifications",
+          },          {
+            titre: "Documentation",
+            lien: "/documentation",
+            icone: "dashboard",
+            description: "Documents du bureau, de l’association et dossiers privés",
           },
         ]
       : [
@@ -229,3 +234,4 @@ export default async function PageAccueil() {
     </AppShell>
   );
 }
+
