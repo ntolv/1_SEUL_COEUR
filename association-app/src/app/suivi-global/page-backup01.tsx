@@ -194,7 +194,7 @@ export default function SuiviGlobalPage() {
           return bTime - aTime;
         }
 
-        return (a.rubrique_nom ?? "").localeCompare(b.rubrique_nom ?? "");
+        return a.rubrique_nom.localeCompare(b.rubrique_nom);
       }),
     }));
   }, [filteredRows]);
@@ -419,11 +419,7 @@ export default function SuiviGlobalPage() {
                             <td className="px-6 py-4 text-right text-sm text-green-400">
                               {formatEuro(Number(row.montant_encaisse))}
                             </td>
-                            <td
-                              className={`px-6 py-4 text-right text-sm ${
-                                Number(row.reste || 0) > 0 ? "text-orange-400" : "text-green-400"
-                              }`}
-                            >
+                            <td className="px-6 py-4 text-right text-sm text-orange-400">
                               {formatEuro(Number(row.reste))}
                             </td>
                             <td className="px-6 py-4 text-center">
@@ -517,11 +513,7 @@ export default function SuiviGlobalPage() {
                         </div>
                         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                           <div className="text-xs text-slate-400">Reste</div>
-                          <div
-                            className={`mt-1 font-semibold ${
-                              totalRestePersonne > 0 ? "text-orange-400" : "text-green-400"
-                            }`}
-                          >
+                          <div className="mt-1 font-semibold text-orange-400">
                             {formatEuro(totalRestePersonne)}
                           </div>
                         </div>
@@ -586,11 +578,7 @@ export default function SuiviGlobalPage() {
                               </div>
                               <div className="rounded-lg bg-slate-900/60 p-2">
                                 <div className="text-[11px] text-slate-400">Reste</div>
-                                <div
-                                  className={`mt-1 ${
-                                    Number(row.reste || 0) > 0 ? "text-orange-400" : "text-green-400"
-                                  }`}
-                                >
+                                <div className="mt-1 text-orange-400">
                                   {formatEuro(Number(row.reste))}
                                 </div>
                               </div>
