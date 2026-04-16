@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
@@ -69,11 +69,30 @@ type DashboardMembre = {
   total_disponible: number;
 };
 
+type DashboardSecoursRecu = {
+  membre_id: string;
+  montant_secours_recu: number;
+  dernier_secours_recu_le: string | null;
+};
+
+type DashboardPretEnCours = {
+  pret_id: number;
+  membre_id: string;
+  reste_global: number;
+};
+
 function formatMontant(valeur: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
   }).format(Number(valeur ?? 0));
+}
+
+function formatDateHeure(valeur: string | null | undefined) {
+  if (!valeur) return "Aucune aide enregistrée";
+  const date = new Date(valeur);
+  if (Number.isNaN(date.getTime())) return "Aucune aide enregistrée";
+  return date.toLocaleString("fr-FR");
 }
 
 function getInitiales(nom: string) {
@@ -96,6 +115,8 @@ export default function DashboardPage() {
   const [profil, setProfil] = useState<Profil | null>(null);
   const [dashboardGlobal, setDashboardGlobal] = useState<DashboardGlobal | null>(null);
   const [dashboardMembre, setDashboardMembre] = useState<DashboardMembre | null>(null);
+  const [dashboardSecoursRecu, setDashboardSecoursRecu] = useState<DashboardSecoursRecu | null>(null);
+  const [dashboardPretsEnCours, setDashboardPretsEnCours] = useState<DashboardPretEnCours[]>([]);
   const [chargement, setChargement] = useState(true);
   const [deconnexion, setDeconnexion] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -141,15 +162,50 @@ export default function DashboardPage() {
 
         setDashboardGlobal(data && data.length > 0 ? data[0] : null);
       } else {
-        const { data, error } = await supabase.rpc("fn_dashboard_membre_connecte");
+        const [
+          dashboardMembreRes,
+          secoursRecuRes,
+          pretsEnCoursRes,
+        ] = await Promise.all([
+          supabase.rpc("fn_dashboard_membre_connecte"),
+          supabase
+            .from("v_dashboard_montant_secours_recu")
+            .select("membre_id, montant_secours_recu, dernier_secours_recu_le")
+            .eq("membre_id", profilCharge.id)
+            .maybeSingle(),
+          supabase
+            .from("v_dashboard_prets_en_cours")
+            .select("pret_id, membre_id, reste_global")
+            .eq("membre_id", profilCharge.id),
+        ]);
 
-        if (error) {
-          setErreur(error.message);
+        if (dashboardMembreRes.error) {
+          setErreur(dashboardMembreRes.error.message);
           setChargement(false);
           return;
         }
 
-        setDashboardMembre(data && data.length > 0 ? data[0] : null);
+        setDashboardMembre(
+          dashboardMembreRes.data && dashboardMembreRes.data.length > 0
+            ? dashboardMembreRes.data[0]
+            : null
+        );
+
+        if (secoursRecuRes.error) {
+          console.error("Dashboard secours reçu:", secoursRecuRes.error.message);
+        } else {
+          setDashboardSecoursRecu(
+            (secoursRecuRes.data as DashboardSecoursRecu | null) ?? null
+          );
+        }
+
+        if (pretsEnCoursRes.error) {
+          console.error("Dashboard prêts en cours:", pretsEnCoursRes.error.message);
+        } else {
+          setDashboardPretsEnCours(
+            (pretsEnCoursRes.data as DashboardPretEnCours[] | null) ?? []
+          );
+        }
       }
 
       setChargement(false);
@@ -164,6 +220,10 @@ export default function DashboardPage() {
     router.push("/login");
     router.refresh();
   }
+
+  const totalPretsEnCoursResteGlobal = useMemo(() => {
+    return dashboardPretsEnCours.reduce((sum, item) => sum + Number(item.reste_global ?? 0), 0);
+  }, [dashboardPretsEnCours]);
 
   const cartesGlobales = dashboardGlobal
     ? [
@@ -204,8 +264,18 @@ export default function DashboardPage() {
     ? [
         {
           titre: "Mes prêts",
-          valeur: String(dashboardMembre.nb_prets ?? 0),
-          sousTexte: "En cours " + String(dashboardMembre.nb_prets_en_cours ?? 0),
+          valeur: String(
+            dashboardPretsEnCours.length > 0
+              ? dashboardPretsEnCours.length
+              : (dashboardMembre.nb_prets_en_cours ?? dashboardMembre.nb_prets ?? 0)
+          ),
+          sousTexte:
+            "Reste global " +
+            formatMontant(
+              dashboardPretsEnCours.length > 0
+                ? totalPretsEnCoursResteGlobal
+                : dashboardMembre.reste_a_payer
+            ),
         },
         {
           titre: "Reste à payer",
@@ -213,9 +283,9 @@ export default function DashboardPage() {
           sousTexte: "Remboursé " + formatMontant(dashboardMembre.total_rembourse),
         },
         {
-          titre: "Mes investissements",
-          valeur: String(dashboardMembre.nb_investissements ?? 0),
-          sousTexte: "Capital " + formatMontant(dashboardMembre.capital_investi),
+          titre: "Montant secours reçu",
+          valeur: formatMontant(dashboardSecoursRecu?.montant_secours_recu ?? 0),
+          sousTexte: "Dernière aide " + formatDateHeure(dashboardSecoursRecu?.dernier_secours_recu_le),
         },
         {
           titre: "Mes gains",
@@ -383,6 +453,13 @@ export default function DashboardPage() {
                       className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-amber-400/30 hover:bg-amber-400/10"
                     >
                       Voir les membres
+                    </Link>
+
+                    <Link
+                      href="/decaissements"
+                      className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 transition hover:border-red-400/30 hover:bg-red-400/10"
+                    >
+                      Gérer les décaissements
                     </Link>
                   </div>
                 </div>

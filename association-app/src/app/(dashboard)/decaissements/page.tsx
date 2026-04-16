@@ -21,7 +21,7 @@ type RubriqueRow = {
 type DecaissementRow = {
   id: number;
   created_at: string;
-  type_decaissement: "SECOURS" | "TONTINE" | "PRET";
+  type_decaissement: "SECOURS" | "DECAISSEMENT_SIMPLE" | "PRET";
   rubrique_source_code: string;
   montant: number;
   motif: string;
@@ -38,17 +38,36 @@ type FormDataPayload = {
 
 const ROLES_AUTORISES = new Set(["ADMIN", "PRESIDENT", "TRESORIER"]);
 
-function euro(value: number) {
+function formatMontant(valeur: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
-  }).format(Number.isFinite(value) ? value : 0);
+  }).format(Number(valeur ?? 0));
 }
 
 function parsePositiveNumber(value: string) {
   const normalized = String(value ?? "").replace(",", ".").trim();
   const num = Number(normalized);
   return Number.isFinite(num) ? num : 0;
+}
+
+function normalize(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+
+function isSimpleRubrique(r: RubriqueRow) {
+  const code = normalize(r.code);
+  return [
+    "TONTINE",
+    "TONTINE PETIT CAHIER",
+    "REPAS",
+    "ANNIVERSAIRE",
+    "FOND DE ROULEMENT",
+  ].includes(code);
 }
 
 function QuickAmountButtons({
@@ -121,7 +140,7 @@ export default function DecaissementsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [submittingSecours, setSubmittingSecours] = useState(false);
-  const [submittingTontine, setSubmittingTontine] = useState(false);
+  const [submittingSimple, setSubmittingSimple] = useState(false);
   const [submittingPret, setSubmittingPret] = useState(false);
 
   const [secoursMembreId, setSecoursMembreId] = useState("");
@@ -129,11 +148,11 @@ export default function DecaissementsPage() {
   const [secoursMotif, setSecoursMotif] = useState("");
   const [secoursCommentaire, setSecoursCommentaire] = useState("");
 
-  const [tontineRubrique, setTontineRubrique] = useState("");
-  const [tontineMembreId, setTontineMembreId] = useState("");
-  const [tontineMontant, setTontineMontant] = useState("0");
-  const [tontineMotif, setTontineMotif] = useState("");
-  const [tontineCommentaire, setTontineCommentaire] = useState("");
+  const [simpleRubrique, setSimpleRubrique] = useState("");
+  const [simpleMembreId, setSimpleMembreId] = useState("");
+  const [simpleMontant, setSimpleMontant] = useState("0");
+  const [simpleMotif, setSimpleMotif] = useState("");
+  const [simpleCommentaire, setSimpleCommentaire] = useState("");
 
   const [pretMembreId, setPretMembreId] = useState("");
   const [pretMontant, setPretMontant] = useState("0");
@@ -141,22 +160,17 @@ export default function DecaissementsPage() {
   const [pretCommentaire, setPretCommentaire] = useState("");
 
   const rubriquesSecours = useMemo(
-    () => rubriques.filter((r) => r.code === "SECOURS"),
+    () => rubriques.filter((r) => normalize(r.code) === "SECOURS"),
     [rubriques]
   );
 
-  const rubriquesTontine = useMemo(
-    () =>
-      rubriques.filter(
-        (r) =>
-          r.code === "TONTINE_GRAND_CAHIER" ||
-          r.code === "TONTINE_PETIT_CAHIER"
-      ),
+  const rubriquesSimples = useMemo(
+    () => rubriques.filter((r) => isSimpleRubrique(r)),
     [rubriques]
   );
 
   const rubriqueInvestissement = useMemo(
-    () => rubriques.find((r) => r.code === "INVESTISSEMENT") || null,
+    () => rubriques.find((r) => normalize(r.code) === "INVESTISSEMENT") || null,
     [rubriques]
   );
 
@@ -196,22 +210,17 @@ export default function DecaissementsPage() {
     setRubriques(rubriquesRows);
     setMembres(membresRows);
 
-    setTontineRubrique((prev) => {
-      const valid = rubriquesRows.filter(
-        (r) =>
-          r.code === "TONTINE_GRAND_CAHIER" ||
-          r.code === "TONTINE_PETIT_CAHIER"
-      );
-      return prev && valid.some((r) => r.code === prev)
-        ? prev
-        : (valid[0]?.code ?? "");
-    });
+    const defaultSimple = rubriquesRows.find((r) => isSimpleRubrique(r))?.code || "";
+
+    setSimpleRubrique((prev) =>
+      prev && rubriquesRows.some((r) => r.code === prev) ? prev : defaultSimple
+    );
 
     const defaultMembreId = membresRows[0]?.id ?? "";
     setSecoursMembreId((prev) =>
       prev && membresRows.some((m) => m.id === prev) ? prev : defaultMembreId
     );
-    setTontineMembreId((prev) =>
+    setSimpleMembreId((prev) =>
       prev && membresRows.some((m) => m.id === prev) ? prev : defaultMembreId
     );
     setPretMembreId((prev) =>
@@ -269,31 +278,31 @@ export default function DecaissementsPage() {
     await loadPage();
   }
 
-  async function submitTontine(e: React.FormEvent) {
+  async function submitSimple(e: React.FormEvent) {
     e.preventDefault();
-    setSubmittingTontine(true);
+    setSubmittingSimple(true);
     setMessage(null);
     setError(null);
 
     const res = await supabase.rpc("fn_creer_decaissement_tontine", {
-      p_rubrique_code: tontineRubrique,
-      p_membre_beneficiaire_id: tontineMembreId,
-      p_montant: parsePositiveNumber(tontineMontant),
-      p_motif: tontineMotif,
-      p_commentaire: tontineCommentaire,
+      p_rubrique_code: simpleRubrique,
+      p_membre_beneficiaire_id: simpleMembreId,
+      p_montant: parsePositiveNumber(simpleMontant),
+      p_motif: simpleMotif,
+      p_commentaire: simpleCommentaire,
     });
 
     if (res.error) {
       setError(res.error.message);
-      setSubmittingTontine(false);
+      setSubmittingSimple(false);
       return;
     }
 
-    setMessage("Décaissement tontine enregistré avec succès.");
-    setTontineMontant("0");
-    setTontineMotif("");
-    setTontineCommentaire("");
-    setSubmittingTontine(false);
+    setMessage("Décaissement simple enregistré avec succès.");
+    setSimpleMontant("0");
+    setSimpleMotif("");
+    setSimpleCommentaire("");
+    setSubmittingSimple(false);
     await loadPage();
   }
 
@@ -328,8 +337,8 @@ export default function DecaissementsPage() {
     setSecoursMontant(String(parsePositiveNumber(secoursMontant) + amount));
   }
 
-  function addTontineAmount(amount: number) {
-    setTontineMontant(String(parsePositiveNumber(tontineMontant) + amount));
+  function addSimpleAmount(amount: number) {
+    setSimpleMontant(String(parsePositiveNumber(simpleMontant) + amount));
   }
 
   function addPretAmount(amount: number) {
@@ -347,7 +356,7 @@ export default function DecaissementsPage() {
               </div>
               <h1 className="mt-4 text-3xl font-black text-white">Sorties de caisse</h1>
               <p className="mt-2 max-w-3xl text-sm text-slate-300">
-                Secours collectif, tontines individuelles et prêts investissement.
+                Secours collectif, décaissements simples et prêts investissement.
               </p>
               <p className="mt-2 text-xs text-slate-400">
                 Accès réservé à President / Tresorier / Admin
@@ -359,7 +368,7 @@ export default function DecaissementsPage() {
               <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                 15 derniers décaissements
               </div>
-              <div className="mt-2 text-2xl font-black text-white">{euro(totalRecent)}</div>
+              <div className="mt-2 text-2xl font-black text-white">{formatMontant(totalRecent)}</div>
             </div>
           </div>
         </section>
@@ -389,7 +398,7 @@ export default function DecaissementsPage() {
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
               <SectionCard
                 title="Secours"
-                subtitle={`Solde global : ${euro(Number(rubriquesSecours[0]?.solde_global ?? 0))}`}
+                subtitle={`Solde global : ${formatMontant(Number(rubriquesSecours[0]?.solde_global ?? 0))}`}
               >
                 <form className="space-y-4" onSubmit={submitSecours}>
                   <div>
@@ -468,29 +477,33 @@ export default function DecaissementsPage() {
               </SectionCard>
 
               <SectionCard
-                title="Tontines"
-                subtitle={`Rubriques disponibles : ${rubriquesTontine.length}`}
+                title="Décaissement simple"
+                subtitle={rubriquesSimples.length > 0
+                  ? rubriquesSimples
+                      .map((r) => `${r.nom}: ${formatMontant(Number(r.solde_global ?? 0))}`)
+                      .join(" — ")
+                  : "Aucune rubrique simple disponible"}
               >
-                <form className="space-y-4" onSubmit={submitTontine}>
+                <form className="space-y-4" onSubmit={submitSimple}>
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-slate-200">
                       Rubrique
                     </label>
                     <select
-                      value={tontineRubrique}
-                      onChange={(e) => setTontineRubrique(e.target.value)}
+                      value={simpleRubrique}
+                      onChange={(e) => setSimpleRubrique(e.target.value)}
                       className={selectClassName}
                     >
                       <option style={{ backgroundColor: "#0f172a", color: "#ffffff" }} value="">
                         Sélectionner une rubrique
                       </option>
-                      {rubriquesTontine.map((rubrique) => (
+                      {rubriquesSimples.map((rubrique) => (
                         <option
                           style={{ backgroundColor: "#0f172a", color: "#ffffff" }}
                           key={rubrique.id}
                           value={rubrique.code}
                         >
-                          {rubrique.nom} — {euro(Number(rubrique.solde_global ?? 0))}
+                          {rubrique.nom} — {formatMontant(Number(rubrique.solde_global ?? 0))}
                         </option>
                       ))}
                     </select>
@@ -501,8 +514,8 @@ export default function DecaissementsPage() {
                       Membre bénéficiaire
                     </label>
                     <select
-                      value={tontineMembreId}
-                      onChange={(e) => setTontineMembreId(e.target.value)}
+                      value={simpleMembreId}
+                      onChange={(e) => setSimpleMembreId(e.target.value)}
                       className={selectClassName}
                     >
                       <option style={{ backgroundColor: "#0f172a", color: "#ffffff" }} value="">
@@ -528,12 +541,12 @@ export default function DecaissementsPage() {
                       type="number"
                       min="0"
                       step="0.01"
-                      value={tontineMontant}
-                      onChange={(e) => setTontineMontant(e.target.value)}
+                      value={simpleMontant}
+                      onChange={(e) => setSimpleMontant(e.target.value)}
                       className={inputClassName}
                     />
                     <div className="mt-3">
-                      <QuickAmountButtons onAdd={addTontineAmount} />
+                      <QuickAmountButtons onAdd={addSimpleAmount} />
                     </div>
                   </div>
 
@@ -542,8 +555,8 @@ export default function DecaissementsPage() {
                       Motif
                     </label>
                     <textarea
-                      value={tontineMotif}
-                      onChange={(e) => setTontineMotif(e.target.value)}
+                      value={simpleMotif}
+                      onChange={(e) => setSimpleMotif(e.target.value)}
                       rows={3}
                       className={inputClassName}
                     />
@@ -554,8 +567,8 @@ export default function DecaissementsPage() {
                       Commentaire
                     </label>
                     <textarea
-                      value={tontineCommentaire}
-                      onChange={(e) => setTontineCommentaire(e.target.value)}
+                      value={simpleCommentaire}
+                      onChange={(e) => setSimpleCommentaire(e.target.value)}
                       rows={2}
                       className={inputClassName}
                     />
@@ -563,17 +576,17 @@ export default function DecaissementsPage() {
 
                   <button
                     type="submit"
-                    disabled={submittingTontine || !rubriquesTontine.length || !membres.length}
+                    disabled={submittingSimple || !rubriquesSimples.length || !membres.length}
                     className="rounded-[18px] border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submittingTontine ? "Enregistrement..." : "Valider tontine"}
+                    {submittingSimple ? "Enregistrement..." : "Valider décaissement simple"}
                   </button>
                 </form>
               </SectionCard>
 
               <SectionCard
                 title="Prêts investissement"
-                subtitle={`Solde global : ${euro(Number(rubriqueInvestissement?.solde_global ?? 0))}`}
+                subtitle={`Solde global : ${formatMontant(Number(rubriqueInvestissement?.solde_global ?? 0))}`}
               >
                 <form className="space-y-4" onSubmit={submitPret}>
                   <div>
@@ -677,7 +690,7 @@ export default function DecaissementsPage() {
                           </div>
                         </div>
                         <div className="rounded-[18px] border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm font-black text-cyan-100">
-                          {euro(Number(row.montant ?? 0))}
+                          {formatMontant(Number(row.montant ?? 0))}
                         </div>
                       </div>
 

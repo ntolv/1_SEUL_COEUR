@@ -31,10 +31,13 @@ export default function SituationGlobalePage() {
     setLoading(true);
     setError(null);
 
-    const [{ data: membres, error: errM }, { data: preinscrits, error: errP }] = await Promise.all([
-      supabase.from("membres").select("id, nom_complet, telephone, email"),
-      supabase.from("membres_preinscriptions").select("id, nom_complet, telephone, email"),
-    ]);
+    const [{ data: membres, error: errM }, { data: preinscrits, error: errP }] =
+      await Promise.all([
+        supabase.from("membres").select("id, nom_complet, telephone, email"),
+        supabase
+          .from("membres_preinscriptions")
+          .select("id, nom_complet, telephone, email"),
+      ]);
 
     if (errM) {
       setError(errM.message);
@@ -93,12 +96,7 @@ export default function SituationGlobalePage() {
     if (!q) return rows;
 
     return rows.filter((r) =>
-      [
-        r.nom_complet ?? "",
-        r.email ?? "",
-        r.telephone ?? "",
-        r.type_personne ?? "",
-      ]
+      [r.nom_complet ?? "", r.email ?? "", r.telephone ?? "", r.type_personne ?? ""]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -166,7 +164,9 @@ export default function SituationGlobalePage() {
                       className="border-b border-slate-800 text-slate-200"
                     >
                       <td className="px-3 py-3">{row.type_personne}</td>
-                      <td className="px-3 py-3 font-medium text-white">{row.nom_complet}</td>
+                      <td className="px-3 py-3 font-medium text-white">
+                        {row.nom_complet}
+                      </td>
                       <td className="px-3 py-3">{row.telephone ?? "-"}</td>
                       <td className="px-3 py-3">{row.email ?? "-"}</td>
                     </tr>
