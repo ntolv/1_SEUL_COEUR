@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
@@ -55,7 +55,7 @@ export default function MiseAJourPage() {
             </button>
 
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => window.location.href = "/page-accueil"}
               className="px-4 py-2 rounded-lg bg-cyan-600 text-white"
             >
               Mettre à jour
