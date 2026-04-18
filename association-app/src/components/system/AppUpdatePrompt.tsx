@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { CURRENT_APP_VERSION } from "@/lib/appVersion";
 
@@ -14,68 +15,127 @@ type AppVersionRow = {
   plateforme: string | null;
 };
 
+function getDismissKey(versionCode: number) {
+  return "usc_update_dismissed_version_" + String(versionCode);
+}
+
 export default function AppUpdatePrompt() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
   const [latestVersion, setLatestVersion] = useState<AppVersionRow | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
-  const storageKey = useMemo(
-    () => "usc_update_hidden_" + CURRENT_APP_VERSION,
-    []
-  );
-
-  async function checkVersion() {
-    try {
-      const hidden = sessionStorage.getItem(storageKey);
-      if (hidden === "1") return;
-
-      const { data } = await supabase
-        .from("app_versions")
-        .select("version_code, version_name, titre, message, obligatoire, active, plateforme")
-        .eq("active", true)
-        .order("version_code", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (data && Number(data.version_code) > Number(CURRENT_APP_VERSION)) {
-        setLatestVersion(data);
-        setOpen(true);
-      }
-    } catch {}
-  }
+  const mountedRef = useRef(true);
+  const checkingRef = useRef(false);
 
   useEffect(() => {
-    checkVersion();
-    const interval = setInterval(checkVersion, 30000);
-    return () => clearInterval(interval);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  function goHomeAndReload() {
-    // redirection propre vers accueil
-    const url = new URL(window.location.origin);
-    url.searchParams.set("v", Date.now().toString());
-    window.location.replace(url.toString());
+  useEffect(() => {
+    async function checkVersion() {
+      if (checkingRef.current) return;
+      checkingRef.current = true;
+
+      try {
+        const { data, error } = await supabase
+          .from("app_versions")
+          .select("version_code, version_name, titre, message, obligatoire, active, plateforme")
+          .eq("active", true)
+          .or("plateforme.eq.web,plateforme.eq.all,plateforme.is.null")
+          .order("version_code", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error || !data) return;
+
+        const latestCode = Number(data.version_code || 0);
+        const currentCode = Number(CURRENT_APP_VERSION || 0);
+
+        if (latestCode <= currentCode) {
+          if (mountedRef.current) {
+            setOpen(false);
+            setLatestVersion(null);
+          }
+          return;
+        }
+
+        const dismissed = sessionStorage.getItem(getDismissKey(latestCode)) === "1";
+        if (dismissed) {
+          if (mountedRef.current) {
+            setOpen(false);
+            setLatestVersion(null);
+          }
+          return;
+        }
+
+        if (mountedRef.current) {
+          setLatestVersion(data);
+          setOpen(true);
+        }
+      } catch (e) {
+        console.error("Erreur vérification version:", e);
+      } finally {
+        checkingRef.current = false;
+      }
+    }
+
+    checkVersion();
+    const interval = window.setInterval(checkVersion, 30000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  function redirectHome(forceRefresh: boolean) {
+    setIsRedirecting(true);
+    setOpen(false);
+
+    const target = forceRefresh
+      ? "/?refresh=" + Date.now().toString()
+      : "/";
+
+    if (pathname !== "/") {
+      router.replace(target);
+      window.setTimeout(() => {
+        window.location.href = target;
+      }, 120);
+      return;
+    }
+
+    window.location.href = target;
   }
 
   function handleClose() {
-    if (latestVersion?.obligatoire) return;
+    if (!latestVersion) return;
+    if (latestVersion.obligatoire) return;
 
-    sessionStorage.setItem(storageKey, "1");
-    setOpen(false);
-
-    // redirection accueil
-    goHomeAndReload();
+    sessionStorage.setItem(getDismissKey(Number(latestVersion.version_code)), "1");
+    redirectHome(false);
   }
 
   function handleUpdate() {
-    setOpen(false);
+    if (!latestVersion) return;
 
-    // redirection accueil + refresh
-    goHomeAndReload();
+    sessionStorage.setItem(getDismissKey(Number(latestVersion.version_code)), "1");
+    redirectHome(true);
   }
 
-  if (!open || !latestVersion) return null;
+  if (!open || !latestVersion || isRedirecting) {
+    return null;
+  }
 
   const obligatoire = !!latestVersion.obligatoire;
+  const title = latestVersion.titre?.trim() || "Nouvelle mise à jour disponible";
+  const message =
+    latestVersion.message?.trim() ||
+    "Une nouvelle version de l’application est disponible. Recharge maintenant pour l’utiliser.";
 
   return (
     <div
@@ -87,43 +147,65 @@ export default function AppUpdatePrompt() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        padding: "16px",
       }}
     >
       <div
         style={{
-          width: "90%",
+          width: "100%",
           maxWidth: "420px",
-          background: "#fff",
-          borderRadius: "16px",
+          background: "#ffffff",
+          borderRadius: "18px",
           overflow: "hidden",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
         }}
       >
         <div
           style={{
             padding: "16px",
             background: "#16a34a",
-            color: "#fff",
-            fontWeight: "bold",
+            color: "#ffffff",
+            fontWeight: 800,
+            fontSize: "18px",
           }}
         >
-          {latestVersion.titre || "Mise à jour disponible"}
+          {title}
         </div>
 
-        <div style={{ padding: "16px" }}>
-          <p style={{ marginBottom: "16px" }}>
-            {latestVersion.message || "Une nouvelle version est disponible."}
+        <div style={{ padding: "18px" }}>
+          <p
+            style={{
+              margin: 0,
+              marginBottom: "18px",
+              color: "#1f2937",
+              lineHeight: 1.5,
+              minHeight: "48px",
+            }}
+          >
+            {message}
           </p>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
             {!obligatoire && (
               <button
+                type="button"
                 onClick={handleClose}
                 style={{
-                  padding: "10px",
-                  borderRadius: "10px",
-                  border: "1px solid #ccc",
-                  background: "#fff",
+                  minWidth: "110px",
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  border: "1px solid #d1d5db",
+                  background: "#ffffff",
+                  color: "#374151",
+                  fontWeight: 700,
+                  cursor: "pointer",
                 }}
               >
                 Plus tard
@@ -131,14 +213,17 @@ export default function AppUpdatePrompt() {
             )}
 
             <button
+              type="button"
               onClick={handleUpdate}
               style={{
-                padding: "10px",
-                borderRadius: "10px",
-                background: "#16a34a",
-                color: "#fff",
+                minWidth: "120px",
+                padding: "12px 14px",
+                borderRadius: "12px",
                 border: "none",
-                fontWeight: "bold",
+                background: "#16a34a",
+                color: "#ffffff",
+                fontWeight: 800,
+                cursor: "pointer",
               }}
             >
               Mettre à jour
