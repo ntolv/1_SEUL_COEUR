@@ -2,6 +2,7 @@
 import "./globals.css";
 import AppUpdatePrompt from "@/components/system/AppUpdatePrompt";
 import AppVersionBadge from "@/components/system/AppVersionBadge";
+import AppVersionTracker from "@/components/system/AppVersionTracker";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
@@ -54,9 +55,11 @@ export default function RootLayout({
     <html lang="fr">
       <body>{children}        <AppUpdatePrompt />
               <AppVersionBadge />
+              <AppVersionTracker />
       </body>
     </html>
   );
 }
+
 
 
