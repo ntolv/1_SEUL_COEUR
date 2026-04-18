@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next";
 import "./globals.css";
 import AppUpdatePrompt from "@/components/system/AppUpdatePrompt";
+import AppVersionBadge from "@/components/system/AppVersionBadge";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
@@ -52,8 +53,10 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>{children}        <AppUpdatePrompt />
+              <AppVersionBadge />
       </body>
     </html>
   );
 }
+
 
