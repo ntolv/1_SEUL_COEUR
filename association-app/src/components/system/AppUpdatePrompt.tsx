@@ -16,162 +16,129 @@ type AppVersionRow = {
 
 export default function AppUpdatePrompt() {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [latestVersion, setLatestVersion] = useState<AppVersionRow | null>(null);
 
   const storageKey = useMemo(
-    () => "usc_update_hidden_for_version_" + CURRENT_APP_VERSION,
+    () => "usc_update_hidden_" + CURRENT_APP_VERSION,
     []
   );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function checkVersion() {
-      try {
-        const hidden = sessionStorage.getItem(storageKey);
-        if (hidden === "1") {
-          setLoading(false);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("app_versions")
-          .select("version_code, version_name, titre, message, obligatoire, active, plateforme")
-          .eq("active", true)
-          .or("plateforme.eq.web,plateforme.eq.all,plateforme.is.null")
-          .order("version_code", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (error) {
-          console.error("Erreur vérification version:", error);
-          setLoading(false);
-          return;
-        }
-
-        if (!cancelled && data && Number(data.version_code) > Number(CURRENT_APP_VERSION)) {
-          setLatestVersion(data);
-          setOpen(true);
-        }
-      } catch (e) {
-        console.error("Erreur inattendue version:", e);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    checkVersion();
-
-    const interval = window.setInterval(checkVersion, 60000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [storageKey]);
-
-  function handleClose() {
+  async function checkVersion() {
     try {
-      sessionStorage.setItem(storageKey, "1");
+      const hidden = sessionStorage.getItem(storageKey);
+      if (hidden === "1") return;
+
+      const { data } = await supabase
+        .from("app_versions")
+        .select("version_code, version_name, titre, message, obligatoire, active, plateforme")
+        .eq("active", true)
+        .order("version_code", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data && Number(data.version_code) > Number(CURRENT_APP_VERSION)) {
+        setLatestVersion(data);
+        setOpen(true);
+      }
     } catch {}
-    setOpen(false);
   }
 
-  function handleUpdateNow() {
-    setOpen(false);
+  useEffect(() => {
+    checkVersion();
+    const interval = setInterval(checkVersion, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-    const url = new URL(window.location.href);
-    url.searchParams.set("refresh", Date.now().toString());
-
+  function goHomeAndReload() {
+    // redirection propre vers accueil
+    const url = new URL(window.location.origin);
+    url.searchParams.set("v", Date.now().toString());
     window.location.replace(url.toString());
   }
 
-  if (loading || !open || !latestVersion) {
-    return null;
+  function handleClose() {
+    if (latestVersion?.obligatoire) return;
+
+    sessionStorage.setItem(storageKey, "1");
+    setOpen(false);
+
+    // redirection accueil
+    goHomeAndReload();
   }
+
+  function handleUpdate() {
+    setOpen(false);
+
+    // redirection accueil + refresh
+    goHomeAndReload();
+  }
+
+  if (!open || !latestVersion) return null;
+
+  const obligatoire = !!latestVersion.obligatoire;
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.45)",
+        background: "rgba(0,0,0,0.5)",
         zIndex: 99999,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "16px",
       }}
     >
       <div
         style={{
-          width: "100%",
+          width: "90%",
           maxWidth: "420px",
-          borderRadius: "20px",
-          background: "#ffffff",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
+          background: "#fff",
+          borderRadius: "16px",
           overflow: "hidden",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
         }}
       >
         <div
           style={{
-            padding: "18px 18px 12px 18px",
-            borderBottom: "1px solid #eef2f7",
-            background: "linear-gradient(135deg, #0f766e 0%, #16a34a 100%)",
-            color: "#ffffff",
+            padding: "16px",
+            background: "#16a34a",
+            color: "#fff",
+            fontWeight: "bold",
           }}
         >
-          <div style={{ fontSize: "18px", fontWeight: 800 }}>
-            {latestVersion.titre?.trim() || "Nouvelle mise à jour disponible"}
-          </div>
-          <div style={{ marginTop: "6px", fontSize: "13px", opacity: 0.95 }}>
-            Version actuelle : {CURRENT_APP_VERSION} | Nouvelle version : {latestVersion.version_code}
-          </div>
+          {latestVersion.titre || "Mise à jour disponible"}
         </div>
 
-        <div style={{ padding: "18px" }}>
-          <p style={{ margin: 0, color: "#1f2937", lineHeight: 1.55 }}>
-            {latestVersion.message?.trim() || "Une nouvelle version de l’application est disponible. Recharge maintenant pour l’utiliser."}
+        <div style={{ padding: "16px" }}>
+          <p style={{ marginBottom: "16px" }}>
+            {latestVersion.message || "Une nouvelle version est disponible."}
           </p>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              marginTop: "18px",
-              justifyContent: "flex-end",
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              type="button"
-              onClick={handleClose}
-              style={{
-                border: "1px solid #d1d5db",
-                background: "#ffffff",
-                color: "#374151",
-                borderRadius: "12px",
-                padding: "10px 14px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Plus tard
-            </button>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+            {!obligatoire && (
+              <button
+                onClick={handleClose}
+                style={{
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border: "1px solid #ccc",
+                  background: "#fff",
+                }}
+              >
+                Plus tard
+              </button>
+            )}
 
             <button
-              type="button"
-              onClick={handleUpdateNow}
+              onClick={handleUpdate}
               style={{
-                border: "none",
+                padding: "10px",
+                borderRadius: "10px",
                 background: "#16a34a",
-                color: "#ffffff",
-                borderRadius: "12px",
-                padding: "10px 14px",
-                fontWeight: 800,
-                cursor: "pointer",
+                color: "#fff",
+                border: "none",
+                fontWeight: "bold",
               }}
             >
               Mettre à jour
