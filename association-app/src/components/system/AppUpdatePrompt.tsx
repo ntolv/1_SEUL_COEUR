@@ -1,9 +1,9 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { CURRENT_APP_VERSION } from "@/lib/appVersion";
+import { APP_VERSION_CODE, APP_VERSION_NAME } from "@/lib/appVersion";
 
 type AppVersionRow = {
   version_code: number;
@@ -55,7 +55,7 @@ export default function AppUpdatePrompt() {
         if (error || !data) return;
 
         const latestCode = Number(data.version_code || 0);
-        const currentCode = Number(CURRENT_APP_VERSION || 0);
+        const currentCode = Number(APP_VERSION_CODE || 0);
 
         if (latestCode <= currentCode) {
           if (mountedRef.current) {
@@ -79,7 +79,7 @@ export default function AppUpdatePrompt() {
           setOpen(true);
         }
       } catch (e) {
-        console.error("Erreur vérification version:", e);
+        console.error("Erreur verification version:", e);
       } finally {
         checkingRef.current = false;
       }
@@ -132,10 +132,10 @@ export default function AppUpdatePrompt() {
   }
 
   const obligatoire = !!latestVersion.obligatoire;
-  const title = latestVersion.titre?.trim() || "Nouvelle mise à jour disponible";
+  const title = latestVersion.titre?.trim() || "Nouvelle mise a jour disponible";
   const message =
     latestVersion.message?.trim() ||
-    "Une nouvelle version de l’application est disponible. Recharge maintenant pour l’utiliser.";
+    "Une nouvelle version de l'application est disponible. Recharge maintenant pour l'utiliser.";
 
   return (
     <div
@@ -176,13 +176,23 @@ export default function AppUpdatePrompt() {
           <p
             style={{
               margin: 0,
-              marginBottom: "18px",
+              marginBottom: "8px",
               color: "#1f2937",
               lineHeight: 1.5,
-              minHeight: "48px",
             }}
           >
             {message}
+          </p>
+
+          <p
+            style={{
+              margin: 0,
+              marginBottom: "18px",
+              fontSize: "12px",
+              color: "#6b7280",
+            }}
+          >
+            Version actuelle : {APP_VERSION_NAME} ({APP_VERSION_CODE}) | Nouvelle version : {latestVersion.version_name || latestVersion.version_code}
           </p>
 
           <div
@@ -226,7 +236,7 @@ export default function AppUpdatePrompt() {
                 cursor: "pointer",
               }}
             >
-              Mettre à jour
+              Mettre a jour
             </button>
           </div>
         </div>
