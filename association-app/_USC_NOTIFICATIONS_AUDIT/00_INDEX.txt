@@ -1,0 +1,10 @@
+﻿=== FICHIERS USC A ANALYSER ===
+
+src\app\(dashboard)\decaissements\page.tsx
+src\app\(dashboard)\documentation\page.tsx
+src\app\(dashboard)\suivi-caisse-session\page.tsx
+src\app\admin-notifications\page.tsx
+src\app\dashboard\page.tsx
+src\app\layout.tsx
+src\app\notifications\page.tsx
+src\components\layout\AppShell.tsx
