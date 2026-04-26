@@ -1,0 +1,23 @@
+
+> association-app@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.2.0 (webpack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.6s
+  Running TypeScript ...
+Failed to type check.
+
+./src/app/synthese-caisse/page.tsx:209:53
+Type error: 'row.nb_personnes' is possibly 'null'.
+
+  [90m207 |[0m ...             </div>
+  [90m208 |[0m ...             <div className=[32m"mt-3 text-sm text-slate-300"[0m>
+[31m[1m>[0m [90m209 |[0m ...               {row.nb_personnes} personne{row.nb_personnes > [35m1[0m ? [32m"s"[0m : [32m""[0m} concernée{...
+  [90m    |[0m                                               [31m[1m^[0m
+  [90m210 |[0m ...             </div>
+  [90m211 |[0m ...           </div>
+  [90m212 |[0m ...         ))}
+Next.js build worker exited with code: 1 and signal: null

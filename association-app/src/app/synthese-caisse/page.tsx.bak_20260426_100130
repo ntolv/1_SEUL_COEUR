@@ -1,0 +1,112 @@
+﻿"use client";
+
+import { useEffect, useState, useRef } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+
+function euro(v) {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(v ?? 0));
+}
+
+export default function Page() {
+  const ref = useRef(null);
+  const [loadingSave, setLoadingSave] = useState(false);
+
+  async function enregistrerPDF() {
+    try {
+      setLoadingSave(true);
+
+      const element = ref.current;
+      if (!element) throw new Error("Element introuvable");
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: "#ffffff"
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      const width = 210;
+      const height = (canvas.height * width) / canvas.width;
+
+      pdf.addImage(imgData, "PNG", 0, 0, width, height);
+
+      const now = new Date();
+      const mois = String(now.getMonth() + 1).padStart(2, "0");
+      const annee = now.getFullYear();
+
+      const fileName = `synthese-caisse-${mois}-${annee}.pdf`;
+
+      const pdfBlob = pdf.output("blob");
+
+      const storagePath = `${(await supabase.auth.getUser()).data.user.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("documentation")
+        .upload(storagePath, pdfBlob, {
+          contentType: "application/pdf",
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase.rpc(
+        "fn_register_synthese_caisse_print",
+        {
+          p_nom_original: fileName,
+          p_nom_stockage: fileName,
+          p_chemin_storage: storagePath,
+          p_taille_bytes: pdfBlob.size,
+          p_mime_type: "application/pdf"
+        }
+      );
+
+      if (insertError) throw insertError;
+
+      alert("✅ PDF enregistré dans ton dossier personnel");
+
+    } catch (e) {
+      console.error(e);
+      alert("❌ Erreur lors de l'enregistrement PDF");
+    } finally {
+      setLoadingSave(false);
+    }
+  }
+
+  return (
+    <AppShell>
+      <div className="p-6 space-y-6">
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 rounded bg-blue-600 text-white"
+          >
+            Imprimer
+          </button>
+
+          <button
+            onClick={enregistrerPDF}
+            disabled={loadingSave}
+            className="px-4 py-2 rounded bg-emerald-600 text-white"
+          >
+            {loadingSave ? "Enregistrement..." : "Enregistrer dans mon dossier"}
+          </button>
+        </div>
+
+        <div ref={ref} className="bg-white text-black p-6 rounded-xl">
+          <h1 className="text-2xl font-bold">Synthèse caisse</h1>
+          <p>Contenu de la page capturé en PDF</p>
+        </div>
+
+      </div>
+    </AppShell>
+  );
+}

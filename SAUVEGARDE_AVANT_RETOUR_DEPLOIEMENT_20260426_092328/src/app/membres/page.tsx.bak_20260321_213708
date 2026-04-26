@@ -1,0 +1,77 @@
+﻿"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+export default function MembresPage() {
+  const [membres, setMembres] = useState([]);
+  const [userId, setUserId] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id ?? null);
+
+      const { data } = await supabase
+        .from("membres")
+        .select("*")
+        .order("nom");
+
+      setMembres(data ?? []);
+    }
+
+    load();
+  }, []);
+
+  const membresTries = useMemo(() => {
+    return [...membres].sort((a, b) => {
+      if (a.user_id === userId) return -1;
+      if (b.user_id === userId) return 1;
+      return (a.nom || "").localeCompare(b.nom || "");
+    });
+  }, [membres, userId]);
+
+  return (
+    <AppShell>
+      <div className="p-6 space-y-6">
+
+        <h1 className="text-2xl font-semibold text-white">
+          Cartes des membres
+        </h1>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {membresTries.map((m) => (
+            <div
+              key={m.id}
+              className={`p-4 rounded-2xl border ${
+                m.user_id === userId
+                  ? "border-green-500 bg-green-900/20"
+                  : "border-gray-700 bg-gray-900"
+              }`}
+            >
+              <div className="text-white font-semibold">
+                {m.nom} {m.prenom}
+              </div>
+
+              <div className="text-sm text-gray-400">
+                {m.email}
+              </div>
+
+              <div className="text-sm text-gray-400">
+                {m.telephone}
+              </div>
+
+              {m.user_id === userId && (
+                <div className="mt-2 text-green-400 text-xs">
+                  Mon profil
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </AppShell>
+  );
+}

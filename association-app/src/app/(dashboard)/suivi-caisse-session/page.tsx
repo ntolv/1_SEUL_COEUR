@@ -61,6 +61,7 @@ function getStatutClasses(statut: Groupe["statut"]) {
 }
 
 export default function SuiviCaisseSessionPage() {
+  const [savingPdf, setSavingPdf] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -162,6 +163,131 @@ export default function SuiviCaisseSessionPage() {
   const nbPersonnes = filtered.length;
   const nbEnRetard = filtered.filter((g) => g.statut !== "À jour").length;
 
+  async function handleSavePdfDocumentation() {
+    try {
+      setSavingPdf(true);
+
+      const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+      const jsPDF = (jspdfModule as any).jsPDF || (jspdfModule as any).default?.jsPDF;
+
+      if (!jsPDF) {
+        throw new Error("jsPDF introuvable.");
+      }
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      const date = new Date().toISOString().slice(0, 10);
+
+      let y = 12;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(15);
+      pdf.text("Suivi caisse session", 10, y);
+
+      y += 8;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.text(`Date : ${date}`, 10, y);
+      y += 6;
+      pdf.text(`Personnes : ${nbPersonnes}`, 10, y);
+      y += 6;
+      pdf.text(`Total encaissé : ${formatMontant(totalGlobalEncaisse)} EUR`, 10, y);
+      y += 6;
+      pdf.text(`Total retard : ${formatMontant(totalGlobalRetard)} EUR`, 10, y);
+      y += 10;
+
+      const groupesAvecParticipation = filtered
+        .map((groupe) => ({
+          ...groupe,
+          rows: groupe.rows.filter((row) => Number(row.montant_encaisse ?? 0) > 0),
+        }))
+        .filter((groupe) => groupe.rows.length > 0);
+
+      if (groupesAvecParticipation.length === 0) {
+        pdf.text("Aucune participation encaissée sur cette session.", 10, y);
+        y += 6;
+      }
+
+      for (const groupe of groupesAvecParticipation) {
+        if (y > 260) {
+          pdf.addPage();
+          y = 12;
+        }
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(11);
+        pdf.text(`${groupe.nom_complet} (${groupe.type_personne})`, 10, y);
+        y += 6;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+
+        for (const row of groupe.rows) {
+          if (y > 280) {
+            pdf.addPage();
+            y = 12;
+          }
+
+          pdf.text(
+            `- ${row.rubrique_nom} : ${formatMontant(Number(row.montant_encaisse ?? 0))} EUR`,
+            12,
+            y
+          );
+          y += 5;
+        }
+
+        y += 4;
+      }
+
+      const blob = pdf.output("blob");
+      const fileName = `suivi-caisse-session-${date}.pdf`;
+      const storagePath = `documents/${Date.now()}_${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("documentation")
+        .upload(storagePath, blob, {
+          contentType: "application/pdf",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error("Upload échoué : " + uploadError.message);
+      }
+
+      const { data: folderId, error: folderError } = await supabase.rpc(
+        "fn_get_print_target_folder_id",
+        { p_target: "BUREAU" }
+      );
+
+      if (folderError || !folderId) {
+        throw new Error("Erreur dossier : " + (folderError?.message ?? "Dossier introuvable"));
+      }
+
+      const { error: insertError } = await supabase
+        .from("documentation_documents")
+        .insert({
+          folder_id: folderId,
+          nom_original: fileName,
+          nom_stockage: fileName,
+          chemin_storage: storagePath,
+          mime_type: "application/pdf",
+          taille_bytes: blob.size,
+          source_type: "IMPRESSION_APP",
+        });
+
+      if (insertError) {
+        throw new Error("Erreur enregistrement : " + insertError.message);
+      }
+
+      alert("✅ PDF léger enregistré dans Documentation Bureau.");
+    } catch (error: any) {
+      console.error(error);
+      alert("Erreur PDF : " + (error?.message ?? "Erreur inconnue"));
+    } finally {
+      setSavingPdf(false);
+    }
+  }
+
   return (
     <AppShell>
       <div className="space-y-6 print:space-y-4">
@@ -175,6 +301,15 @@ export default function SuiviCaisseSessionPage() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleSavePdfDocumentation}
+                disabled={savingPdf}
+                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingPdf ? "Enregistrement..." : "📄 PDF léger"}
+              </button>
+
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -228,9 +363,7 @@ export default function SuiviCaisseSessionPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold">Suivi caisse session</h1>
-                <p className="mt-1 text-sm">
-                  État d'impression de la session active.
-                </p>
+                <p className="mt-1 text-sm">État d'impression de la session active.</p>
               </div>
 
               <div className="text-right text-sm">

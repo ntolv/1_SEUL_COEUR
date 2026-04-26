@@ -1,0 +1,272 @@
+﻿"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+type Row = {
+  session_id: string;
+  annee: number;
+  mois: number;
+  session_libelle: string;
+  type_personne: "MEMBRE" | "PREINSCRIT";
+  personne_id: string;
+  nom_complet: string;
+  rubrique_id: number | null;
+  rubrique_nom: string;
+  montant_attendu: number | null;
+  montant_encaisse: number | null;
+  montant_retard: number | null;
+};
+
+type SessionInfo = {
+  session_id: string;
+  annee: number;
+  mois: number;
+  session_libelle: string;
+};
+
+function formatMontant(value: number | null | undefined) {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function normalize(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export default function SuiviCaisseSessionPage() {
+  const [rows, setRows] = useState<Row[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      setLoading(true);
+      setErrorMsg("");
+
+      const { data, error } = await supabase
+        .from("v_caisse_session_suivi")
+        .select("*")
+        .order("nom_complet", { ascending: true })
+        .order("rubrique_nom", { ascending: true });
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error(error);
+        setErrorMsg(error.message || "Erreur de chargement");
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      setRows((data || []) as Row[]);
+      setLoading(false);
+    }
+
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const sessionInfo = useMemo<SessionInfo | null>(() => {
+    const first = rows[0];
+    if (!first) return null;
+
+    return {
+      session_id: first.session_id,
+      annee: Number(first.annee ?? 0),
+      mois: Number(first.mois ?? 0),
+      session_libelle: first.session_libelle ?? "",
+    };
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const q = normalize(search);
+    if (!q) return rows;
+
+    return rows.filter((row) => {
+      const cible = normalize(
+        `${row.nom_complet} ${row.type_personne} ${row.rubrique_nom} ${row.session_libelle}`
+      );
+      return cible.includes(q);
+    });
+  }, [rows, search]);
+
+  return (
+    <AppShell>
+      <div className="space-y-6 print:space-y-4">
+        <div className="no-print rounded-3xl border border-cyan-400/20 bg-slate-900/70 p-5 shadow-[0_0_30px_rgba(34,211,238,0.08)]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Suivi caisse session</h1>
+              <p className="mt-1 text-sm text-slate-300">
+                Affichage direct des lignes de la session d&apos;encaissement lue depuis le backend.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+              >
+                Imprimer / PDF
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <div className="text-xs uppercase tracking-wide text-slate-400">
+                Session lue
+              </div>
+              <div className="mt-2 text-xl font-bold text-white">
+                {sessionInfo ? sessionInfo.session_libelle : "-"}
+              </div>
+              <div className="mt-1 text-sm text-slate-400">
+                {sessionInfo ? `ID session : ${sessionInfo.session_id}` : "Aucune session trouvée"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <div className="text-xs uppercase tracking-wide text-slate-400">
+                Lignes affichées
+              </div>
+              <div className="mt-2 text-xl font-bold text-white">
+                {filteredRows.length}
+              </div>
+            </div>
+
+            <div>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher un membre, un préinscrit ou une rubrique..."
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/40"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="print-only hidden print:block">
+          <div className="rounded-2xl border border-slate-300 bg-white p-5 text-slate-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold">Suivi caisse session</h1>
+                <p className="mt-1 text-sm">
+                  {sessionInfo
+                    ? `Session imprimée : ${sessionInfo.session_libelle}`
+                    : "Aucune session disponible"}
+                </p>
+              </div>
+
+              <div className="text-right text-sm">
+                <div>Lignes : {filteredRows.length}</div>
+                <div>Session : {sessionInfo?.session_libelle ?? "-"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {loading && (
+          <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 text-slate-300">
+            Chargement en cours...
+          </div>
+        )}
+
+        {!loading && errorMsg && (
+          <div className="rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 text-rose-100">
+            Erreur : {errorMsg}
+          </div>
+        )}
+
+        {!loading && !errorMsg && filteredRows.length === 0 && (
+          <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 text-slate-300">
+            Aucun résultat trouvé.
+          </div>
+        )}
+
+        {!loading && !errorMsg && filteredRows.length > 0 && (
+          <div className="overflow-x-auto rounded-3xl border border-white/10 bg-slate-900/65 p-4 shadow-[0_0_24px_rgba(15,23,42,0.35)] print:rounded-2xl print:border-slate-300 print:bg-white print:p-4 print:text-slate-900 print:shadow-none">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-left text-slate-300 print:border-slate-300 print:text-slate-700">
+                  <th className="px-3 py-3">Session</th>
+                  <th className="px-3 py-3">Type</th>
+                  <th className="px-3 py-3">Nom</th>
+                  <th className="px-3 py-3">Rubrique</th>
+                  <th className="px-3 py-3 text-right">Attendu</th>
+                  <th className="px-3 py-3 text-right">Encaissé</th>
+                  <th className="px-3 py-3 text-right">Retard</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row, index) => (
+                  <tr
+                    key={`${row.type_personne}-${row.personne_id}-${row.rubrique_id ?? "rubrique"}-${index}`}
+                    className="border-b border-white/5 text-slate-200 print:border-slate-200 print:text-slate-900"
+                  >
+                    <td className="px-3 py-3">{row.session_libelle}</td>
+                    <td className="px-3 py-3">{row.type_personne}</td>
+                    <td className="px-3 py-3 font-medium text-white print:text-slate-900">
+                      {row.nom_complet}
+                    </td>
+                    <td className="px-3 py-3">{row.rubrique_nom}</td>
+                    <td className="px-3 py-3 text-right">
+                      {formatMontant(row.montant_attendu)} €
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {formatMontant(row.montant_encaisse)} €
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {formatMontant(row.montant_retard)} €
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <style jsx global>{`
+          @media print {
+            html,
+            body {
+              background: #ffffff !important;
+            }
+
+            .no-print,
+            aside,
+            header {
+              display: none !important;
+            }
+
+            .print-only {
+              display: block !important;
+            }
+
+            main {
+              padding: 0 !important;
+            }
+          }
+        `}</style>
+      </div>
+    </AppShell>
+  );
+}

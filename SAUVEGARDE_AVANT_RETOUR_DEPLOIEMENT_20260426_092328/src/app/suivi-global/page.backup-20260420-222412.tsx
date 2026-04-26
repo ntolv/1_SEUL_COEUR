@@ -1,0 +1,673 @@
+﻿"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+type EncaissementRow = {
+  personne_id: string;
+  nom_complet: string;
+  telephone: string | null;
+  email: string | null;
+  type_personne: "MEMBRE" | "PREINSCRIT";
+  mois_reference: string;
+  rubrique_id: number | null;
+  rubrique_code: string | null;
+  rubrique_nom: string;
+  montant_attendu: number;
+  montant_encaisse: number;
+  reste: number;
+  statut: "A jour" | "En retard";
+};
+
+function normalize(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function getMonthTime(value: string) {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function formatEuro(value: number) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
+}
+
+function formatMois(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("fr-FR", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function normalizePhoneForWhatsapp(telephone: string | null) {
+  const brut = (telephone ?? "").trim();
+  if (!brut) {
+    return "";
+  }
+
+  if (brut.startsWith("+")) {
+    return brut.replace(/[^\d]/g, "");
+  }
+
+  const digits = brut.replace(/\D/g, "");
+  if (!digits) {
+    return "";
+  }
+
+  if (digits.startsWith("00")) {
+    return digits.slice(2);
+  }
+
+  return digits;
+}
+
+function getWhatsappUrl(
+  nomComplet: string,
+  telephone: string | null,
+  rows: EncaissementRow[]
+) {
+  const numero = normalizePhoneForWhatsapp(telephone);
+
+  if (!numero) {
+    return null;
+  }
+
+  const lignesRetard = rows.filter((row) => Number(row.reste || 0) > 0);
+
+  if (lignesRetard.length === 0) {
+    return null;
+  }
+
+  const totalReste = lignesRetard.reduce(
+    (sum, row) => sum + Number(row.reste || 0),
+    0
+  );
+
+  const details = lignesRetard
+    .slice()
+    .sort((a, b) => normalize(a.rubrique_nom).localeCompare(normalize(b.rubrique_nom), "fr"))
+    .map((row) => `${row.rubrique_nom} : ${formatEuro(Number(row.reste || 0))}`)
+    .join("\n");
+
+  const message = `Bonjour ${nomComplet},
+
+ASSOCIATION UN SEUL COEUR
+Vous avez actuellement un retard de paiement :
+
+${details}
+
+Montant total restant : ${formatEuro(totalReste)}
+
+Merci.`;
+
+  return `https://wa.me/${numero}?text=${encodeURIComponent(message)}`;
+}
+
+export default function SuiviGlobalPage() {
+  const [rows, setRows] = useState<EncaissementRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [searchPersonne, setSearchPersonne] = useState("");
+  const [filterType, setFilterType] = useState<"TOUS" | "MEMBRE" | "PREINSCRIT">("TOUS");
+  const [filterRubrique, setFilterRubrique] = useState("TOUS");
+
+  async function charger() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("v_encaissements_suivi_global")
+        .select("*")
+        .order("mois_reference", { ascending: false })
+        .order("nom_complet", { ascending: true });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const safeRows = ((data as EncaissementRow[]) || []).map((row) => ({
+        ...row,
+        nom_complet: row.nom_complet ?? "",
+        telephone: row.telephone ?? null,
+        email: row.email ?? null,
+        rubrique_nom: row.rubrique_nom ?? "",
+        rubrique_code: row.rubrique_code ?? null,
+        mois_reference: row.mois_reference ?? "",
+        montant_attendu: Number(row.montant_attendu || 0),
+        montant_encaisse: Number(row.montant_encaisse || 0),
+        reste: Number(row.reste || 0),
+      }));
+
+      setRows(safeRows);
+    } catch (err: any) {
+      setError(err?.message || "Erreur lors du chargement.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    charger();
+  }, []);
+
+  const rubriques = useMemo(() => {
+    const map = new Map<string, string>();
+
+    rows.forEach((row) => {
+      const label = (row.rubrique_nom ?? "").trim();
+      if (!label) {
+        return;
+      }
+
+      const key = normalize(label);
+      if (!map.has(key)) {
+        map.set(key, label);
+      }
+    });
+
+    const uniqueRubriques = Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, "fr", { sensitivity: "base" })
+    );
+
+    return ["TOUS", ...uniqueRubriques];
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const search = normalize(searchPersonne);
+    const rubriqueFilter = normalize(filterRubrique);
+
+    return rows.filter((row) => {
+      if (search) {
+        const nom = normalize(row.nom_complet);
+        const telephone = normalize(row.telephone);
+        const email = normalize(row.email);
+
+        if (
+          !nom.includes(search) &&
+          !telephone.includes(search) &&
+          !email.includes(search)
+        ) {
+          return false;
+        }
+      }
+
+      if (filterType !== "TOUS" && row.type_personne !== filterType) {
+        return false;
+      }
+
+      if (
+        filterRubrique !== "TOUS" &&
+        normalize(row.rubrique_nom) !== rubriqueFilter
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [rows, searchPersonne, filterType, filterRubrique]);
+
+  const groupedRows = useMemo(() => {
+    const groups = new Map<string, EncaissementRow[]>();
+
+    filteredRows.forEach((row) => {
+      const groupKey = `${row.type_personne}__${row.personne_id}`;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey)!.push(row);
+    });
+
+    return Array.from(groups.entries())
+      .map(([groupKey, personRows]) => ({
+        groupKey,
+        personneId: personRows[0].personne_id,
+        nomComplet: personRows[0].nom_complet,
+        telephone: personRows[0].telephone,
+        email: personRows[0].email,
+        typePersonne: personRows[0].type_personne,
+        whatsappUrl: getWhatsappUrl(
+          personRows[0].nom_complet,
+          personRows[0].telephone,
+          personRows
+        ),
+        rows: [...personRows].sort((a, b) => {
+          const aTime = getMonthTime(a.mois_reference);
+          const bTime = getMonthTime(b.mois_reference);
+
+          if (aTime !== bTime) {
+            return bTime - aTime;
+          }
+
+          return normalize(a.rubrique_nom).localeCompare(normalize(b.rubrique_nom), "fr");
+        }),
+      }))
+      .sort((a, b) => normalize(a.nomComplet).localeCompare(normalize(b.nomComplet), "fr"));
+  }, [filteredRows]);
+
+  const stats = useMemo(() => {
+    const totalAttendu = filteredRows.reduce((sum, row) => sum + Number(row.montant_attendu || 0), 0);
+    const totalEncaisse = filteredRows.reduce((sum, row) => sum + Number(row.montant_encaisse || 0), 0);
+    const totalReste = filteredRows.reduce((sum, row) => sum + Number(row.reste || 0), 0);
+    const nombreAjour = filteredRows.filter((row) => row.statut === "A jour").length;
+    const nombreEnRetard = filteredRows.filter((row) => row.statut === "En retard").length;
+
+    return {
+      totalAttendu,
+      totalEncaisse,
+      totalReste,
+      nombreAjour,
+      nombreEnRetard,
+      nombreTotal: filteredRows.length,
+    };
+  }, [filteredRows]);
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-200">
+                Vision globale
+              </div>
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight">
+                Suivi global des encaissements
+              </h1>
+              <p className="mt-2 text-sm text-slate-300">
+                Vue d&apos;ensemble de tous les encaissements par rubrique
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Rechercher une personne
+              </label>
+              <input
+                type="text"
+                value={searchPersonne}
+                onChange={(e) => setSearchPersonne(e.target.value)}
+                placeholder="Nom, téléphone ou email..."
+                className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Type de personne
+              </label>
+              <select
+                value={filterType}
+                onChange={(e) =>
+                  setFilterType(e.target.value as "TOUS" | "MEMBRE" | "PREINSCRIT")
+                }
+                className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              >
+                <option value="TOUS">Tous</option>
+                <option value="MEMBRE">Membres</option>
+                <option value="PREINSCRIT">Préinscrits</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Rubrique
+              </label>
+              <select
+                value={filterRubrique}
+                onChange={(e) => setFilterRubrique(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              >
+                {rubriques.map((rubrique) => (
+                  <option key={rubrique} value={rubrique}>
+                    {rubrique}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearchPersonne("");
+                  setFilterType("TOUS");
+                  setFilterRubrique("TOUS");
+                }}
+                className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white transition-colors hover:bg-slate-600"
+              >
+                Réinitialiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+            <div className="text-sm text-slate-400">Total attendu</div>
+            <div className="mt-2 text-2xl font-bold text-white">
+              {formatEuro(stats.totalAttendu)}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+            <div className="text-sm text-slate-400">Total encaissé</div>
+            <div className="mt-2 text-2xl font-bold text-green-400">
+              {formatEuro(stats.totalEncaisse)}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+            <div className="text-sm text-slate-400">Reste à payer</div>
+            <div className="mt-2 text-2xl font-bold text-orange-400">
+              {formatEuro(stats.totalReste)}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+            <div className="text-sm text-slate-400">À jour</div>
+            <div className="mt-2 text-2xl font-bold text-cyan-400">
+              {stats.nombreAjour}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+            <div className="text-sm text-slate-400">En retard</div>
+            <div className="mt-2 text-2xl font-bold text-red-400">
+              {stats.nombreEnRetard}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl">
+          {loading ? (
+            <div className="p-8 text-center text-slate-300">Chargement...</div>
+          ) : error ? (
+            <div className="p-8 text-center text-red-400">Erreur: {error}</div>
+          ) : groupedRows.length === 0 ? (
+            <div className="p-8 text-center text-slate-300">
+              Aucun résultat trouvé
+            </div>
+          ) : (
+            <>
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full">
+                  <thead className="border-b border-white/10">
+                    <tr className="text-left">
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
+                        Personne
+                      </th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
+                        Type
+                      </th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
+                        Rubrique
+                      </th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
+                        Attendu
+                      </th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
+                        Encaissé
+                      </th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
+                        Reste
+                      </th>
+                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
+                        Statut
+                      </th>
+                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {groupedRows.map((groupe) => (
+                      <React.Fragment key={groupe.groupKey}>
+                        {groupe.rows.map((row, index) => (
+                          <tr
+                            key={`${groupe.groupKey}-${row.mois_reference}-${row.rubrique_id ?? normalize(row.rubrique_nom)}-${index}`}
+                            className="hover:bg-white/5"
+                          >
+                            <td className="px-6 py-4">
+                              {index === 0 && (
+                                <div>
+                                  <div className="font-medium text-white">
+                                    {groupe.nomComplet}
+                                  </div>
+                                  <div className="text-sm text-slate-400">
+                                    {groupe.telephone}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {index === 0 && (
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                    groupe.typePersonne === "MEMBRE"
+                                      ? "bg-cyan-400/20 text-cyan-300"
+                                      : "bg-purple-400/20 text-purple-300"
+                                  }`}
+                                >
+                                  {groupe.typePersonne}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-white">
+                              {row.rubrique_nom}
+                            </td>
+                            <td className="px-6 py-4 text-right text-sm text-white">
+                              {formatEuro(Number(row.montant_attendu))}
+                            </td>
+                            <td className="px-6 py-4 text-right text-sm text-green-400">
+                              {formatEuro(Number(row.montant_encaisse))}
+                            </td>
+                            <td
+                              className={`px-6 py-4 text-right text-sm ${
+                                Number(row.reste || 0) > 0 ? "text-orange-400" : "text-green-400"
+                              }`}
+                            >
+                              {formatEuro(Number(row.reste))}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span
+                                className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                  row.statut === "A jour"
+                                    ? "bg-green-400/20 text-green-300"
+                                    : "bg-red-400/20 text-red-300"
+                                }`}
+                              >
+                                {row.statut}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {index === 0 ? (
+                                groupe.whatsappUrl ? (
+                                  <a
+                                    href={groupe.whatsappUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-green-500"
+                                  >
+                                    WhatsApp
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-slate-500">—</span>
+                                )
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-4 p-4 lg:hidden">
+                {groupedRows.map((groupe) => {
+                  const totalAttenduPersonne = groupe.rows.reduce(
+                    (sum, row) => sum + Number(row.montant_attendu || 0),
+                    0
+                  );
+                  const totalEncaissePersonne = groupe.rows.reduce(
+                    (sum, row) => sum + Number(row.montant_encaisse || 0),
+                    0
+                  );
+                  const totalRestePersonne = groupe.rows.reduce(
+                    (sum, row) => sum + Number(row.reste || 0),
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={groupe.groupKey}
+                      className="rounded-2xl border border-white/10 bg-slate-950/40 p-4 shadow-xl"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-lg font-semibold text-white">
+                            {groupe.nomComplet}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            {groupe.telephone || "Téléphone non renseigné"}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs ${
+                            groupe.typePersonne === "MEMBRE"
+                              ? "bg-cyan-400/20 text-cyan-300"
+                              : "bg-purple-400/20 text-purple-300"
+                          }`}
+                        >
+                          {groupe.typePersonne}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-slate-400">Attendu</div>
+                          <div className="mt-1 font-semibold text-white">
+                            {formatEuro(totalAttenduPersonne)}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-slate-400">Encaissé</div>
+                          <div className="mt-1 font-semibold text-green-400">
+                            {formatEuro(totalEncaissePersonne)}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-slate-400">Reste</div>
+                          <div
+                            className={`mt-1 font-semibold ${
+                              totalRestePersonne > 0 ? "text-orange-400" : "text-green-400"
+                            }`}
+                          >
+                            {formatEuro(totalRestePersonne)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        {groupe.whatsappUrl ? (
+                          <a
+                            href={groupe.whatsappUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-green-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-green-500"
+                          >
+                            Envoyer sur WhatsApp
+                          </a>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-white/10 px-4 py-3 text-center text-sm text-slate-500">
+                            Aucun numéro exploitable ou aucun retard à notifier
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {groupe.rows.map((row, index) => (
+                          <div
+                            key={`${groupe.groupKey}-${row.mois_reference}-${row.rubrique_id ?? normalize(row.rubrique_nom)}-${index}`}
+                            className="rounded-xl border border-white/10 bg-white/5 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-white">
+                                  {row.rubrique_nom}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-400">
+                                  {formatMois(row.mois_reference)}
+                                </div>
+                              </div>
+
+                              <span
+                                className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                  row.statut === "A jour"
+                                    ? "bg-green-400/20 text-green-300"
+                                    : "bg-red-400/20 text-red-300"
+                                }`}
+                              >
+                                {row.statut}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                              <div className="rounded-lg bg-slate-900/60 p-2">
+                                <div className="text-[11px] text-slate-400">Attendu</div>
+                                <div className="mt-1 text-white">
+                                  {formatEuro(Number(row.montant_attendu))}
+                                </div>
+                              </div>
+                              <div className="rounded-lg bg-slate-900/60 p-2">
+                                <div className="text-[11px] text-slate-400">Encaissé</div>
+                                <div className="mt-1 text-green-400">
+                                  {formatEuro(Number(row.montant_encaisse))}
+                                </div>
+                              </div>
+                              <div className="rounded-lg bg-slate-900/60 p-2">
+                                <div className="text-[11px] text-slate-400">Reste</div>
+                                <div
+                                  className={`mt-1 ${
+                                    Number(row.reste || 0) > 0 ? "text-orange-400" : "text-green-400"
+                                  }`}
+                                >
+                                  {formatEuro(Number(row.reste))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </AppShell>
+  );
+}

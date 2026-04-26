@@ -1,0 +1,133 @@
+﻿import { supabase } from "@/lib/supabaseClient";
+
+export async function savePdfToDocumentation({
+  element,
+  fileName,
+  target = "MEMBRE",
+}: {
+  element: HTMLElement;
+  fileName: string;
+  target?: "MEMBRE" | "BUREAU" | "ASSOCIATION";
+}) {
+  if (typeof window === "undefined") {
+    throw new Error("La génération PDF doit être lancée depuis le navigateur.");
+  }
+
+  if (!element) {
+    throw new Error("Element introuvable");
+  }
+
+  const html2canvasModule = await import("html2canvas");
+  const html2canvas = html2canvasModule.default;
+
+  const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+  const jsPDF = (jspdfModule as any).jsPDF || (jspdfModule as any).default?.jsPDF;
+
+  const clone = element.cloneNode(true) as HTMLElement;
+
+  clone.style.position = "fixed";
+  clone.style.left = "-10000px";
+  clone.style.top = "0";
+  clone.style.width = `${element.offsetWidth}px`;
+  clone.style.backgroundColor = "rgb(2, 6, 23)";
+  clone.style.color = "rgb(255, 255, 255)";
+
+  const all = clone.querySelectorAll<HTMLElement>("*");
+  all.forEach((node) => {
+    node.style.color = "rgb(255, 255, 255)";
+    node.style.borderColor = "rgba(34, 211, 238, 0.25)";
+    node.style.boxShadow = "none";
+    node.style.textShadow = "none";
+
+    const tag = node.tagName.toLowerCase();
+
+    if (tag === "p" || tag === "span" || tag === "h1" || tag === "h2" || tag === "h3" || tag === "div") {
+      if (!node.style.backgroundColor) {
+        node.style.backgroundColor = "transparent";
+      }
+    }
+  });
+
+  document.body.appendChild(clone);
+
+  try {
+    const canvas = await html2canvas(clone, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "rgb(2, 6, 23)",
+      logging: false,
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+
+    const pdf = new jsPDF("p", "mm", "a4");
+
+    const imgWidth = 210;
+    const pageHeight = 297;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    const blob = pdf.output("blob");
+
+    const cleanFileName = fileName
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9-_]/g, "-")
+      .replace(/-+/g, "-")
+      .toLowerCase();
+
+    const storagePath = `documents/${Date.now()}_${cleanFileName}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("documentation")
+      .upload(storagePath, blob, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error("Upload échoué : " + uploadError.message);
+    }
+
+    const { data: folderId, error: folderError } = await supabase.rpc(
+      "fn_get_print_target_folder_id",
+      { p_target: target }
+    );
+
+    if (folderError || !folderId) {
+      throw new Error("Erreur dossier : " + (folderError?.message ?? "Dossier introuvable"));
+    }
+
+    const { error: insertError } = await supabase
+      .from("documentation_documents")
+      .insert({
+        folder_id: folderId,
+        nom_original: `${cleanFileName}.pdf`,
+        nom_stockage: `${cleanFileName}.pdf`,
+        chemin_storage: storagePath,
+        mime_type: "application/pdf",
+        taille_bytes: blob.size,
+        source_type: "IMPRESSION_APP",
+      });
+
+    if (insertError) {
+      throw new Error("Erreur enregistrement : " + insertError.message);
+    }
+
+    return true;
+  } finally {
+    document.body.removeChild(clone);
+  }
+}

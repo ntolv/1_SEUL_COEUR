@@ -45,21 +45,7 @@ function formatDate(value?: string) {
   if (!value) return "Date inconnue";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function scopeBadge(scope: Folder["scope_type"]) {
-  if (scope === "BUREAU") {
-    return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
-  }
-  if (scope === "MEMBRE_PRIVE") {
-    return "border-violet-400/30 bg-violet-400/10 text-violet-200";
-  }
-  return "border-cyan-400/30 bg-cyan-400/10 text-cyan-200";
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
 function scopeTitle(scope: Folder["scope_type"]) {
@@ -70,7 +56,6 @@ function scopeTitle(scope: Folder["scope_type"]) {
 
 function fileTypeLabel(mime: string | null) {
   const value = (mime ?? "").toLowerCase();
-
   if (value.includes("pdf")) return "PDF";
   if (value.includes("word") || value.includes("document")) return "Word";
   if (value.includes("excel") || value.includes("spreadsheet") || value.includes("sheet")) return "Excel";
@@ -78,26 +63,25 @@ function fileTypeLabel(mime: string | null) {
   return "Fichier";
 }
 
-function folderVisual(scope: Folder["scope_type"]) {
-  if (scope === "BUREAU") {
-    return {
-      glow: "from-emerald-500/30 via-emerald-400/10 to-transparent",
-      ring: "border-emerald-400/20",
-      icon: "🏛️",
-    };
-  }
-  if (scope === "MEMBRE_PRIVE") {
-    return {
-      glow: "from-violet-500/30 via-fuchsia-400/10 to-transparent",
-      ring: "border-violet-400/20",
-      icon: "🔒",
-    };
-  }
-  return {
-    glow: "from-cyan-500/30 via-sky-400/10 to-transparent",
-    ring: "border-cyan-400/20",
-    icon: "📁",
-  };
+function fileIcon(mime: string | null) {
+  const type = fileTypeLabel(mime);
+  if (type === "PDF") return "📄";
+  if (type === "Word") return "📝";
+  if (type === "Excel") return "📊";
+  if (type === "Image") return "🖼️";
+  return "📁";
+}
+
+function folderIcon(scope: Folder["scope_type"]) {
+  if (scope === "BUREAU") return "🏛️";
+  if (scope === "MEMBRE_PRIVE") return "🔒";
+  return "📁";
+}
+
+function badgeClass(scope: Folder["scope_type"]) {
+  if (scope === "BUREAU") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+  if (scope === "MEMBRE_PRIVE") return "border-violet-400/30 bg-violet-400/10 text-violet-200";
+  return "border-cyan-400/30 bg-cyan-400/10 text-cyan-200";
 }
 
 function FolderCard({
@@ -109,53 +93,28 @@ function FolderCard({
   active: boolean;
   onClick: () => void;
 }) {
-  const visual = folderVisual(folder.scope_type);
-
   return (
     <button
       onClick={onClick}
       className={[
-        "group relative w-full overflow-hidden rounded-[28px] border text-left transition-all duration-300",
-        "bg-slate-950/55 backdrop-blur-xl shadow-[0_18px_60px_rgba(0,0,0,0.28)]",
-        visual.ring,
+        "w-full rounded-3xl border p-4 text-left shadow-[0_16px_50px_rgba(0,0,0,0.25)] transition",
         active
-          ? "scale-[1.01] border-cyan-300/40 shadow-[0_22px_70px_rgba(34,211,238,0.16)]"
-          : "hover:scale-[1.01] hover:shadow-[0_24px_80px_rgba(0,0,0,0.34)]",
+          ? "border-cyan-300/50 bg-cyan-400/10"
+          : "border-white/10 bg-slate-950/55 hover:border-white/25 hover:bg-white/[0.06]",
       ].join(" ")}
     >
-      <div className={`absolute inset-0 bg-gradient-to-br ${visual.glow}`} />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+      <div className="flex items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-xl">
+          {folderIcon(folder.scope_type)}
+        </div>
 
-      <div className="relative p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-2xl shadow-inner shadow-white/5">
-              {visual.icon}
-            </div>
-
-            <div className="min-w-0">
-              <div className="truncate text-base font-black tracking-tight text-white">
-                {folder.nom}
-              </div>
-
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${scopeBadge(
-                    folder.scope_type
-                  )}`}
-                >
-                  {scopeTitle(folder.scope_type)}
-                </span>
-
-                <span className="text-xs text-slate-400">
-                  {folder.slug}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-            Ouvrir
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-black text-white">{folder.nom}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${badgeClass(folder.scope_type)}`}>
+              {scopeTitle(folder.scope_type)}
+            </span>
+            <span className="truncate text-xs text-slate-400">{folder.slug}</span>
           </div>
         </div>
       </div>
@@ -163,27 +122,12 @@ function FolderCard({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  help,
-}: {
-  label: string;
-  value: string;
-  help: string;
-}) {
+function StatCard({ label, value, help }: { label: string; value: string; help: string }) {
   return (
-    <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.15),transparent_32%)]" />
-      <div className="relative">
-        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-          {label}
-        </div>
-        <div className="mt-2 text-3xl font-black tracking-tight text-white">
-          {value}
-        </div>
-        <div className="mt-1 text-xs text-slate-400">{help}</div>
-      </div>
+    <div className="rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.25)]">
+      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</div>
+      <div className="mt-2 truncate text-2xl font-black text-white">{value}</div>
+      <div className="mt-1 text-xs text-slate-400">{help}</div>
     </div>
   );
 }
@@ -204,7 +148,7 @@ function RuleCard({
   };
 
   return (
-    <div className={`rounded-[24px] border p-4 ${map[tone]}`}>
+    <div className={`rounded-3xl border p-4 ${map[tone]}`}>
       <div className="text-sm font-black">{title}</div>
       <div className="mt-1 text-sm opacity-90">{text}</div>
     </div>
@@ -220,6 +164,7 @@ export default function DocumentationPage() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [creatingMine, setCreatingMine] = useState(false);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
   async function loadPage() {
     setLoading(true);
@@ -271,14 +216,9 @@ export default function DocumentationPage() {
     setDocuments(safeDocs);
 
     if (!selectedFolderId && safeFolders.length > 0) {
-      const preferred =
-        safeFolders.find((f) => f.slug === "documentation-association") ?? safeFolders[0];
+      const preferred = safeFolders.find((f) => f.slug === "documentation-association") ?? safeFolders[0];
       setSelectedFolderId(preferred.id);
-    } else if (
-      selectedFolderId &&
-      !safeFolders.some((f) => f.id === selectedFolderId) &&
-      safeFolders.length > 0
-    ) {
+    } else if (selectedFolderId && !safeFolders.some((f) => f.id === selectedFolderId) && safeFolders.length > 0) {
       setSelectedFolderId(safeFolders[0].id);
     }
 
@@ -299,10 +239,7 @@ export default function DocumentationPage() {
     [folders]
   );
 
-  const membersRoot = useMemo(
-    () => folders.find((f) => f.slug === "membres"),
-    [folders]
-  );
+  const membersRoot = useMemo(() => folders.find((f) => f.slug === "membres"), [folders]);
 
   const currentFolder = useMemo(
     () => folders.find((f) => f.id === selectedFolderId) ?? null,
@@ -332,10 +269,6 @@ export default function DocumentationPage() {
     return path;
   }, [currentFolder, folders]);
 
-  const totalDocs = documents.length;
-  const totalFolders = folders.length;
-  const myPrivateFolders = folders.filter((f) => f.scope_type === "MEMBRE_PRIVE").length;
-
   async function createMyFolder() {
     setCreatingMine(true);
     setMessage("");
@@ -349,12 +282,14 @@ export default function DocumentationPage() {
     }
 
     setCreatingMine(false);
-    setMessage("Votre dossier membre privé a été créé.");
+    setMessage("Votre dossier membre privé a été créé ou renommé avec votre nom.");
     await loadPage();
   }
 
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    event.target.value = "";
+
     if (!file || !selectedFolderId) return;
 
     setUploading(true);
@@ -410,18 +345,46 @@ export default function DocumentationPage() {
 
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
+  async function deleteDocument(doc: DocumentItem) {
+    const ok = window.confirm(`Supprimer définitivement le document "${doc.nom_original}" ?`);
+    if (!ok) return;
 
+    setDeletingDocId(doc.id);
+    setMessage("");
+
+    const storageRes = await supabase.storage
+      .from("documentation")
+      .remove([doc.chemin_storage]);
+
+    if (storageRes.error) {
+      setDeletingDocId(null);
+      setMessage("Erreur suppression fichier : " + storageRes.error.message);
+      return;
+    }
+
+    const deleteRes = await supabase
+      .from("documentation_documents")
+      .delete()
+      .eq("id", doc.id);
+
+    if (deleteRes.error) {
+      setDeletingDocId(null);
+      setMessage("Erreur suppression document : " + deleteRes.error.message);
+      return;
+    }
+
+    setDeletingDocId(null);
+    setMessage("Document supprimé avec succès.");
+    await loadPage();
+  }
   return (
     <AppShell>
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_28%),radial-gradient(circle_at_top_left,rgba(6,182,212,0.11),transparent_30%),linear-gradient(180deg,#020617_0%,#0f172a_45%,#111827_100%)] p-4 md:p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
-          <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-slate-950/50 p-6 shadow-[0_26px_90px_rgba(0,0,0,0.38)] backdrop-blur-2xl md:p-8">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_26%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.14),transparent_28%)]" />
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
-
-            <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+      <div className="min-h-screen overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_28%),radial-gradient(circle_at_top_left,rgba(6,182,212,0.11),transparent_30%),linear-gradient(180deg,#020617_0%,#0f172a_45%,#111827_100%)] p-3 sm:p-4 md:p-6">
+        <div className="mx-auto max-w-7xl space-y-5 pb-24 lg:pb-6">
+          <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-4 shadow-[0_26px_90px_rgba(0,0,0,0.38)] backdrop-blur-2xl sm:p-6 md:p-8">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-3xl">
-                <div className="inline-flex items-center rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                <div className="inline-flex items-center rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200">
                   Documentation sécurisée USC
                 </div>
 
@@ -430,135 +393,127 @@ export default function DocumentationPage() {
                 </h1>
 
                 <p className="mt-3 text-sm leading-6 text-slate-300 md:text-base">
-                  Gérez les documents du bureau, les documents partagés de l’association
-                  et les dossiers strictement privés des membres, dans une interface plus
-                  claire, plus premium et plus sécurisée.
+                  Documents du bureau, documents partagés de l’association et dossiers privés des membres.
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:min-w-[520px]">
                 <StatCard label="Rôle" value={role} help="profil détecté" />
-                <StatCard label="Dossiers" value={String(totalFolders)} help="visibles pour vous" />
-                <StatCard label="Documents" value={String(totalDocs)} help="chargés sur la page" />
-                <StatCard label="Privés" value={String(myPrivateFolders)} help="dossiers membres" />
+                <StatCard label="Dossiers" value={String(folders.length)} help="visibles" />
+                <StatCard label="Documents" value={String(documents.length)} help="chargés" />
+                <StatCard label="Privés" value={String(folders.filter((f) => f.scope_type === "MEMBRE_PRIVE").length)} help="membres" />
               </div>
             </div>
           </section>
 
           {message ? (
-            <div className="rounded-[24px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+            <div className="rounded-3xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
               {message}
             </div>
           ) : null}
 
           {loading ? (
-            <div className="rounded-[32px] border border-white/10 bg-slate-950/50 p-8 text-sm text-slate-300 shadow-[0_22px_70px_rgba(0,0,0,0.34)]">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/50 p-8 text-sm text-slate-300">
               Chargement de la documentation...
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-              <div className="space-y-6 xl:col-span-4">
-                {isBureauRole(role) && rootBureau ? (
-                  <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-black text-white">Documentation Bureau</h2>
-                        <p className="text-xs text-slate-400">
-                          Réservée à President, Tresorier et Admin
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">
-                        Bureau
-                      </span>
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+              <aside className="space-y-5 lg:col-span-4">
+                <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.30)] backdrop-blur-xl sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-white">Espaces</h2>
+                      <p className="text-xs text-slate-400">Choisissez un dossier</p>
                     </div>
+                  </div>
 
-                    <FolderCard
-                      folder={rootBureau}
-                      active={selectedFolderId === rootBureau.id}
-                      onClick={() => setSelectedFolderId(rootBureau.id)}
-                    />
-                  </section>
-                ) : null}
+                  <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1 lg:max-h-none">
+                    {isBureauRole(role) && rootBureau ? (
+                      <FolderCard
+                        folder={rootBureau}
+                        active={selectedFolderId === rootBureau.id}
+                        onClick={() => setSelectedFolderId(rootBureau.id)}
+                      />
+                    ) : null}
 
-                {rootAssociation ? (
-                  <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-lg font-black text-white">Documentation Association</h2>
-                        <p className="text-xs text-slate-400">
-                          Documents partagés et espace membres
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">
-                        Association
-                      </span>
-                    </div>
-
-                    <div className="space-y-3">
+                    {rootAssociation ? (
                       <FolderCard
                         folder={rootAssociation}
                         active={selectedFolderId === rootAssociation.id}
                         onClick={() => setSelectedFolderId(rootAssociation.id)}
                       />
+                    ) : null}
 
-                      {membersRoot ? (
-                        <FolderCard
-                          folder={membersRoot}
-                          active={selectedFolderId === membersRoot.id}
-                          onClick={() => setSelectedFolderId(membersRoot.id)}
-                        />
-                      ) : null}
+                    {membersRoot ? (
+                      <FolderCard
+                        folder={membersRoot}
+                        active={selectedFolderId === membersRoot.id}
+                        onClick={() => setSelectedFolderId(membersRoot.id)}
+                      />
+                    ) : null}
 
-                      <button
-                        onClick={createMyFolder}
-                        disabled={creatingMine}
-                        className="w-full rounded-[22px] bg-gradient-to-r from-emerald-500 via-cyan-500 to-sky-500 px-4 py-3 text-sm font-black text-slate-950 shadow-[0_18px_45px_rgba(34,211,238,0.30)] transition hover:translate-y-[-1px] disabled:opacity-60"
-                      >
-                        {creatingMine ? "Création..." : "Créer mon dossier membre"}
-                      </button>
-                    </div>
-                  </section>
-                ) : null}
+                    {childFolders.map((folder) => (
+                      <FolderCard
+                        key={folder.id}
+                        folder={folder}
+                        active={selectedFolderId === folder.id}
+                        onClick={() => setSelectedFolderId(folder.id)}
+                      />
+                    ))}
+                  </div>
 
-                {childFolders.length > 0 ? (
-                  <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
-                    <div className="mb-4 flex items-center justify-between">
-                      <h3 className="text-base font-black text-white">Sous-dossiers</h3>
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
-                        {childFolders.length}
-                      </span>
-                    </div>
+                  <button
+                    onClick={createMyFolder}
+                    disabled={creatingMine}
+                    className="mt-4 w-full rounded-2xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-sky-500 px-4 py-3 text-sm font-black text-slate-950 shadow-[0_18px_45px_rgba(34,211,238,0.30)] disabled:opacity-60"
+                  >
+                    {creatingMine ? "Création..." : "Créer / corriger mon dossier membre"}
+                  </button>
+                </section>
 
-                    <div className="space-y-3">
-                      {childFolders.map((folder) => (
-                        <FolderCard
-                          key={folder.id}
-                          folder={folder}
-                          active={selectedFolderId === folder.id}
-                          onClick={() => setSelectedFolderId(folder.id)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-              </div>
+                <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.30)] backdrop-blur-xl sm:p-5">
+                  <h3 className="text-lg font-black text-white">Règles d’accès</h3>
 
-              <div className="space-y-6 xl:col-span-8">
-                <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  <div className="mt-4 grid gap-3">
+                    <RuleCard title="Bureau" text="Accessible aux profils Président, Trésorier et Admin." tone="bureau" />
+                    <RuleCard title="Association" text="Visible aux membres autorisés par le backend." tone="association" />
+                    <RuleCard title="Privé" text="Réservé au membre propriétaire de son dossier." tone="prive" />
+                  </div>
+                </section>
+              </aside>
+
+              <main className="space-y-5 lg:col-span-8">
+                <section className="sticky top-2 z-30 rounded-[32px] border border-white/10 bg-slate-950/85 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl sm:p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                         Dossier actif
                       </div>
-                      <h2 className="mt-1 text-2xl font-black tracking-tight text-white md:text-3xl">
+
+                      <h2 className="mt-1 truncate text-2xl font-black tracking-tight text-white md:text-3xl">
                         {currentFolder?.nom ?? "Aucun dossier sélectionné"}
                       </h2>
-                      <p className="mt-2 text-sm text-slate-300">
-                        Importation et consultation contrôlées par les règles de sécurité backend.
-                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {currentPath.length > 0 ? (
+                          currentPath.map((folder, index) => (
+                            <div key={folder.id} className="flex items-center gap-2 text-xs text-slate-300">
+                              <button
+                                onClick={() => setSelectedFolderId(folder.id)}
+                                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 hover:bg-white/10"
+                              >
+                                {folder.nom}
+                              </button>
+                              {index < currentPath.length - 1 ? <span className="text-slate-500">/</span> : null}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500">Aucun chemin actif</span>
+                        )}
+                      </div>
                     </div>
 
-                    <label className="inline-flex cursor-pointer items-center justify-center rounded-[22px] border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white shadow-[0_14px_35px_rgba(0,0,0,0.22)] transition hover:bg-white/15">
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white shadow-[0_14px_35px_rgba(0,0,0,0.22)] transition hover:bg-white/15">
                       {uploading ? "Import en cours..." : "Importer un document"}
                       <input
                         type="file"
@@ -569,159 +524,111 @@ export default function DocumentationPage() {
                     </label>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {currentPath.length > 0 ? (
-                      currentPath.map((folder, index) => (
-                        <div
-                          key={folder.id}
-                          className="flex items-center gap-2 text-xs text-slate-300"
-                        >
-                          <button
-                            onClick={() => setSelectedFolderId(folder.id)}
-                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1 hover:bg-white/10"
-                          >
-                            {folder.nom}
-                          </button>
-                          {index < currentPath.length - 1 ? <span className="text-slate-500">/</span> : null}
-                        </div>
-                      ))
-                    ) : (
-                      <span className="text-xs text-slate-500">Aucun chemin actif</span>
-                    )}
-                  </div>
-
-                  <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Type</div>
-                      <div className="mt-2 text-lg font-black text-white">
+                  <div className="mt-5 grid grid-cols-3 gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Type</div>
+                      <div className="mt-1 truncate text-sm font-black text-white">
                         {currentFolder ? scopeTitle(currentFolder.scope_type) : "-"}
                       </div>
                     </div>
 
-                    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Sous-dossiers</div>
-                      <div className="mt-2 text-lg font-black text-white">{childFolders.length}</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Sous-dossiers</div>
+                      <div className="mt-1 text-sm font-black text-white">{childFolders.length}</div>
                     </div>
 
-                    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Documents</div>
-                      <div className="mt-2 text-lg font-black text-white">{currentDocs.length}</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Documents</div>
+                      <div className="mt-1 text-sm font-black text-white">{currentDocs.length}</div>
                     </div>
                   </div>
                 </section>
 
-                <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+                <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl sm:p-5">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-xl font-black text-white">Documents disponibles</h3>
-                      <p className="text-sm text-slate-400">
-                        Tous les fichiers autorisés dans le dossier sélectionné.
-                      </p>
+                      <p className="text-sm text-slate-400">Fichiers du dossier sélectionné.</p>
                     </div>
 
                     <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
-                      {currentDocs.length} élément(s)
+                      {currentDocs.length}
                     </span>
                   </div>
 
                   {currentDocs.length === 0 ? (
-                    <div className="rounded-[28px] border border-dashed border-white/15 bg-white/[0.03] p-10 text-center">
+                    <div className="rounded-[28px] border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
                       <div className="text-5xl">🗂️</div>
-                      <div className="mt-3 text-base font-black text-white">
-                        Aucun document pour le moment
-                      </div>
-                      <div className="mt-1 text-sm text-slate-400">
-                        Importez un fichier dans ce dossier pour commencer.
-                      </div>
+                      <div className="mt-3 text-base font-black text-white">Aucun document</div>
+                      <div className="mt-1 text-sm text-slate-400">Importez un fichier dans ce dossier.</div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       {currentDocs.map((doc) => (
                         <div
                           key={doc.id}
-                          className="group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_16px_50px_rgba(0,0,0,0.24)] transition hover:translate-y-[-2px] hover:bg-white/[0.06]"
+                          className="rounded-[28px] border border-white/10 bg-white/[0.04] p-4 shadow-[0_16px_50px_rgba(0,0,0,0.24)] transition hover:bg-white/[0.06]"
                         >
-                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.10),transparent_30%)]" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex min-w-0 items-start gap-4">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-2xl">
-                                  {fileTypeLabel(doc.mime_type) === "PDF"
-                                    ? "📄"
-                                    : fileTypeLabel(doc.mime_type) === "Word"
-                                    ? "📝"
-                                    : fileTypeLabel(doc.mime_type) === "Excel"
-                                    ? "📊"
-                                    : fileTypeLabel(doc.mime_type) === "Image"
-                                    ? "🖼️"
-                                    : "📁"}
-                                </div>
+                          <div className="flex items-start gap-4">
+                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-2xl">
+                              {fileIcon(doc.mime_type)}
+                            </div>
 
-                                <div className="min-w-0">
-                                  <div className="truncate text-base font-black text-white">
-                                    {doc.nom_original}
-                                  </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-base font-black text-white">{doc.nom_original}</div>
 
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">
-                                      {fileTypeLabel(doc.mime_type)}
-                                    </span>
-
-                                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
-                                      {formatBytes(doc.taille_bytes)}
-                                    </span>
-
-                                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
-                                      {doc.source_type ?? "UPLOAD"}
-                                    </span>
-                                  </div>
-                                </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-200">
+                                  {fileTypeLabel(doc.mime_type)}
+                                </span>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+                                  {formatBytes(doc.taille_bytes)}
+                                </span>
                               </div>
 
-                              <button
-                                onClick={() => openDocument(doc.chemin_storage)}
-                                className="rounded-[18px] border border-white/10 bg-white/10 px-4 py-2 text-sm font-black text-white transition hover:bg-white/15"
-                              >
-                                Consulter
-                              </button>
+                              <div className="mt-3 text-xs text-slate-400">
+                                Ajouté le {formatDate(doc.created_at)}
+                              </div>
                             </div>
+                          </div>
 
-                            <div className="mt-4 text-xs text-slate-400">
-                              Ajouté le {formatDate(doc.created_at)}
-                            </div>
+                          <div className="mt-4 grid grid-cols-2 gap-3">
+                            <button
+                              onClick={() => openDocument(doc.chemin_storage)}
+                              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15"
+                            >
+                              Consulter
+                            </button>
+
+                            <button
+                              onClick={() => deleteDocument(doc)}
+                              disabled={deletingDocId === doc.id}
+                              className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-black text-red-100 transition hover:bg-red-500/20 disabled:opacity-60"
+                            >
+                              {deletingDocId === doc.id ? "Suppression..." : "Supprimer"}
+                            </button>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </section>
-
-                <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
-                  <h3 className="text-lg font-black text-white">Règles d’accès</h3>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <RuleCard
-                      title="Documentation Bureau"
-                      text="Accessible uniquement aux profils President, Tresorier et Admin."
-                      tone="bureau"
-                    />
-                    <RuleCard
-                      title="Documentation Association"
-                      text="Visible à tous les membres autorisés selon les règles backend."
-                      tone="association"
-                    />
-                    <RuleCard
-                      title="Dossier membre privé"
-                      text="Ouverture strictement réservée au membre propriétaire de son dossier."
-                      tone="prive"
-                    />
-                  </div>
-                </section>
-              </div>
+              </main>
             </div>
           )}
+
+          <label className="fixed bottom-20 right-4 z-50 inline-flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-2xl font-black text-slate-950 shadow-xl lg:hidden">
+            +
+            <input
+              type="file"
+              className="hidden"
+              disabled={!selectedFolderId || uploading}
+              onChange={handleUpload}
+            />
+          </label>
         </div>
       </div>
     </AppShell>
   );
 }
+

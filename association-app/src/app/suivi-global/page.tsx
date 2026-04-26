@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
@@ -94,9 +94,97 @@ Merci.`;
 }
 
 export default function SuiviGlobalPage() {
+  async function handleSavePdf() {
+    try {
+      setSavingPdf(true);
+
+      const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+      const jsPDF = (jspdfModule as any).jsPDF;
+
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      let y = 10;
+
+      pdf.setFontSize(14);
+      pdf.text("Suivi global des encaissements", 10, y);
+      y += 10;
+
+      groupedRows.forEach((groupe) => {
+        if (y > 270) {
+          pdf.addPage();
+          y = 10;
+        }
+
+        pdf.setFontSize(11);
+        pdf.text(groupe.nomComplet, 10, y);
+        y += 6;
+
+        groupe.rows.forEach((row) => {
+          if (y > 280) {
+            pdf.addPage();
+            y = 10;
+          }
+
+          pdf.setFontSize(9);
+          pdf.text(
+            `${row.rubrique_nom} | encaissé ${formatEuro(row.montant_encaisse)} | reste ${formatEuro(row.reste)}`,
+            12,
+            y
+          );
+          y += 5;
+        });
+
+        y += 4;
+      });
+
+      const blob = pdf.output("blob");
+      const fileName = `suivi-global-${Date.now()}.pdf`;
+      const storagePath = `documents/${fileName}`;
+
+      // upload storage
+      const { error: uploadError } = await supabase.storage
+        .from("documentation")
+        .upload(storagePath, blob, {
+          contentType: "application/pdf",
+        });
+
+      if (uploadError) throw uploadError;
+
+      // dossier BUREAU
+      const { data: folderId, error: folderError } = await supabase.rpc(
+        "fn_get_print_target_folder_id",
+        { p_target: "BUREAU" }
+      );
+
+      if (folderError) throw folderError;
+
+      // enregistrement DB
+      const { error: insertError } = await supabase
+        .from("documentation_documents")
+        .insert({
+          folder_id: folderId,
+          nom_original: fileName,
+          nom_stockage: fileName,
+          chemin_storage: storagePath,
+          mime_type: "application/pdf",
+          taille_bytes: blob.size,
+          source_type: "IMPRESSION_APP",
+        });
+
+      if (insertError) throw insertError;
+
+      alert("✅ PDF enregistré dans Documentation Bureau");
+
+    } catch (e: any) {
+      alert("Erreur PDF : " + e.message);
+    } finally {
+      setSavingPdf(false);
+    }
+  }
   const [rows, setRows] = useState<EncaissementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingPdf, setSavingPdf] = useState(false);
 
   const [searchPersonne, setSearchPersonne] = useState("");
   const [filterType, setFilterType] = useState<"TOUS" | "MEMBRE" | "PREINSCRIT">("TOUS");
@@ -232,6 +320,13 @@ export default function SuiviGlobalPage() {
                 Vue d&apos;ensemble de tous les encaissements par rubrique
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleSavePdf}
+              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Enregistrer en PDF
+            </button>
           </div>
         </div>
 
@@ -351,30 +446,14 @@ export default function SuiviGlobalPage() {
                 <table className="w-full">
                   <thead className="border-b border-white/10">
                     <tr className="text-left">
-                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
-                        Personne
-                      </th>
-                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
-                        Type
-                      </th>
-                      <th className="px-6 py-4 text-sm font-medium text-slate-300">
-                        Rubrique
-                      </th>
-                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
-                        Attendu
-                      </th>
-                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
-                        Encaissé
-                      </th>
-                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">
-                        Reste
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
-                        Statut
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">
-                        Action
-                      </th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">Personne</th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">Type</th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-300">Rubrique</th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">Attendu</th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">Encaissé</th>
+                      <th className="px-6 py-4 text-right text-sm font-medium text-slate-300">Reste</th>
+                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">Statut</th>
+                      <th className="px-6 py-4 text-center text-sm font-medium text-slate-300">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -609,3 +688,8 @@ export default function SuiviGlobalPage() {
     </AppShell>
   );
 }
+
+
+
+
+

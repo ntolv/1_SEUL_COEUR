@@ -1,0 +1,431 @@
+﻿"use client";
+
+import { useEffect, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+type SyntheseSessionGlobaleRow = {
+  session_id: string;
+  annee: number;
+  mois: number;
+  statut: string | null;
+  session_libelle: string | null;
+  total_attendu_session: number | null;
+  total_encaisse_session: number | null;
+  total_retard_session: number | null;
+  nb_membres_uniques: number | null;
+  nb_preinscrits_uniques: number | null;
+  nb_personnes_uniques: number | null;
+};
+
+type SyntheseRubriqueRow = {
+  session_id: string;
+  annee: number;
+  mois: number;
+  statut: string | null;
+  session_libelle: string | null;
+  rubrique_id: string | number | null;
+  rubrique_code: string | null;
+  rubrique_nom: string | null;
+  total_attendu_rubrique: number | null;
+  total_encaisse_rubrique: number | null;
+  total_retard_rubrique: number | null;
+  nb_personnes_concernees: number | null;
+};
+
+type MembreSessionRow = {
+  type_personne: string;
+  personne_id: string;
+  nom_complet: string;
+  nom_normalise: string;
+  email: string | null;
+  telephone: string | null;
+  session_id: string;
+  annee: number;
+  mois: number;
+  session_libelle: string;
+  total_attendu_session: number | null;
+  total_encaisse_session: number | null;
+  total_retard_session: number | null;
+};
+
+type MembreRubriqueRow = {
+  type_personne: string;
+  personne_id: string;
+  nom_complet: string;
+  nom_normalise: string;
+  email: string | null;
+  telephone: string | null;
+  session_id: string;
+  annee: number;
+  mois: number;
+  session_libelle: string;
+  attendu_id: string | number | null;
+  rubrique_id: string | number | null;
+  rubrique_nom: string | null;
+  rubrique_code: string | null;
+  montant_attendu: number | null;
+  montant_encaisse: number | null;
+  montant_retard: number | null;
+};
+
+function euro(v: number | null | undefined) {
+  const n = Number(v ?? 0);
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+  }).format(n);
+}
+
+function statutClasse(statut: string | null | undefined) {
+  const s = (statut ?? "").trim().toUpperCase();
+  if (s.includes("FERM") || s.includes("CLOT") || s.includes("CLOS")) {
+    return "border border-red-700/40 bg-red-500/10 text-red-200";
+  }
+  if (!s || s === "INCONNU") {
+    return "border border-slate-700/40 bg-slate-500/10 text-slate-200";
+  }
+  return "border border-emerald-700/40 bg-emerald-500/10 text-emerald-200";
+}
+
+function toNumber(value: unknown) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export default function SyntheseCaissePage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [sessionGlobale, setSessionGlobale] = useState<SyntheseSessionGlobaleRow | null>(null);
+  const [rubriquesGlobales, setRubriquesGlobales] = useState<SyntheseRubriqueRow[]>([]);
+  const [membreSession, setMembreSession] = useState<MembreSessionRow | null>(null);
+  const [membreRubriques, setMembreRubriques] = useState<MembreRubriqueRow[]>([]);
+
+  async function charger() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data: userRes, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        throw new Error(userError.message);
+      }
+
+      const authUserId = userRes.user?.id ?? null;
+      let membreId: string | null = null;
+
+      if (authUserId) {
+        const { data: membreData, error: membreError } = await supabase
+          .from("membres")
+          .select("id")
+          .eq("auth_user_id", authUserId)
+          .maybeSingle();
+
+        if (membreError) {
+          throw new Error(membreError.message);
+        }
+
+        membreId = membreData?.id ?? null;
+      }
+
+      const { data: globaleData, error: globaleError } = await supabase
+        .from("v_synthese_caisse_session_globale")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
+      if (globaleError) {
+        throw new Error(globaleError.message);
+      }
+
+      const sessionId = globaleData?.session_id ?? null;
+
+      const [rubriquesRes, membreSessionRes, membreRubriquesRes] = await Promise.all([
+        supabase
+          .from("v_synthese_caisse_session_rubriques")
+          .select("*")
+          .order("rubrique_nom", { ascending: true }),
+
+        sessionId && membreId
+          ? supabase
+              .from("v_encaissements_hybrides_session_courante")
+              .select("*")
+              .eq("type_personne", "MEMBRE")
+              .eq("personne_id", membreId)
+              .eq("session_id", sessionId)
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+
+        sessionId && membreId
+          ? supabase
+              .from("v_encaissements_hybrides_detail")
+              .select("*")
+              .eq("type_personne", "MEMBRE")
+              .eq("personne_id", membreId)
+              .eq("session_id", sessionId)
+              .order("rubrique_nom", { ascending: true })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (rubriquesRes.error) {
+        throw new Error(rubriquesRes.error.message);
+      }
+
+      if (membreSessionRes.error) {
+        throw new Error(membreSessionRes.error.message);
+      }
+
+      if (membreRubriquesRes.error) {
+        throw new Error(membreRubriquesRes.error.message);
+      }
+
+      setSessionGlobale(
+        globaleData
+          ? {
+              session_id: globaleData.session_id,
+              annee: toNumber(globaleData.annee),
+              mois: toNumber(globaleData.mois),
+              statut: globaleData.statut ?? null,
+              session_libelle: globaleData.session_libelle ?? null,
+              total_attendu_session: toNumber(globaleData.total_attendu_session),
+              total_encaisse_session: toNumber(globaleData.total_encaisse_session),
+              total_retard_session: toNumber(globaleData.total_retard_session),
+              nb_membres_uniques: toNumber(globaleData.nb_membres_uniques),
+              nb_preinscrits_uniques: toNumber(globaleData.nb_preinscrits_uniques),
+              nb_personnes_uniques: toNumber(globaleData.nb_personnes_uniques),
+            }
+          : null
+      );
+
+      setRubriquesGlobales(
+        ((rubriquesRes.data ?? []) as any[]).map((row) => ({
+          session_id: row.session_id,
+          annee: toNumber(row.annee),
+          mois: toNumber(row.mois),
+          statut: row.statut ?? null,
+          session_libelle: row.session_libelle ?? null,
+          rubrique_id: row.rubrique_id ?? null,
+          rubrique_code: row.rubrique_code ?? null,
+          rubrique_nom: row.rubrique_nom ?? null,
+          total_attendu_rubrique: toNumber(row.total_attendu_rubrique),
+          total_encaisse_rubrique: toNumber(row.total_encaisse_rubrique),
+          total_retard_rubrique: toNumber(row.total_retard_rubrique),
+          nb_personnes_concernees: toNumber(row.nb_personnes_concernees),
+        }))
+      );
+
+      setMembreSession(
+        membreSessionRes.data
+          ? {
+              type_personne: membreSessionRes.data.type_personne,
+              personne_id: membreSessionRes.data.personne_id,
+              nom_complet: membreSessionRes.data.nom_complet,
+              nom_normalise: membreSessionRes.data.nom_normalise,
+              email: membreSessionRes.data.email ?? null,
+              telephone: membreSessionRes.data.telephone ?? null,
+              session_id: membreSessionRes.data.session_id,
+              annee: toNumber(membreSessionRes.data.annee),
+              mois: toNumber(membreSessionRes.data.mois),
+              session_libelle: membreSessionRes.data.session_libelle,
+              total_attendu_session: toNumber(membreSessionRes.data.total_attendu_session),
+              total_encaisse_session: toNumber(membreSessionRes.data.total_encaisse_session),
+              total_retard_session: toNumber(membreSessionRes.data.total_retard_session),
+            }
+          : null
+      );
+
+      setMembreRubriques(
+        ((membreRubriquesRes.data ?? []) as any[]).map((row) => ({
+          type_personne: row.type_personne,
+          personne_id: row.personne_id,
+          nom_complet: row.nom_complet,
+          nom_normalise: row.nom_normalise,
+          email: row.email ?? null,
+          telephone: row.telephone ?? null,
+          session_id: row.session_id,
+          annee: toNumber(row.annee),
+          mois: toNumber(row.mois),
+          session_libelle: row.session_libelle,
+          attendu_id: row.attendu_id ?? null,
+          rubrique_id: row.rubrique_id ?? null,
+          rubrique_nom: row.rubrique_nom ?? null,
+          rubrique_code: row.rubrique_code ?? null,
+          montant_attendu: toNumber(row.montant_attendu),
+          montant_encaisse: toNumber(row.montant_encaisse),
+          montant_retard: toNumber(row.montant_retard),
+        }))
+      );
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur de chargement de la synthèse caisse.");
+      setSessionGlobale(null);
+      setRubriquesGlobales([]);
+      setMembreSession(null);
+      setMembreRubriques([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    charger();
+  }, []);
+
+  const sessionLabel =
+    sessionGlobale?.session_libelle ??
+    (sessionGlobale ? `${String(sessionGlobale.mois).padStart(2, "0")}/${sessionGlobale.annee}` : "-");
+
+  const statut = sessionGlobale?.statut ?? "INCONNU";
+  const totalCaisse = sessionGlobale?.total_encaisse_session ?? 0;
+  const totalMembre = membreSession?.total_encaisse_session ?? 0;
+
+  return (
+    <AppShell>
+      <div className="space-y-6 p-6">
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.28)]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.22em] text-cyan-300/70">
+                Synthèse caisse
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold text-white">
+                Caisse du mois
+              </h1>
+              <p className="mt-2 text-sm text-slate-300">
+                Vue globale des encaissements du mois et contribution du membre connecté.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] px-4 py-3 text-sm text-slate-200">
+              <div className="font-medium text-white">
+                Session {sessionLabel}
+              </div>
+              <div className="mt-1">
+                Statut :
+                <span className={`ml-2 inline-flex rounded-full px-3 py-1 text-xs font-medium ${statutClasse(statut)}`}>
+                  {statut}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+            <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+              Chargement...
+            </div>
+          </div>
+        ) : error ? (
+          <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+            <div className="rounded-2xl border border-red-900/40 bg-red-950/30 px-4 py-6 text-red-200">
+              {error}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                  Montant global
+                </p>
+                <h2 className="mt-3 text-xl font-semibold text-white">
+                  Montant total encaissé du mois
+                </h2>
+                <div className="mt-6 text-4xl font-bold text-white">
+                  {euro(totalCaisse)}
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                  Ma session
+                </p>
+                <h2 className="mt-3 text-xl font-semibold text-white">
+                  Total de ma contribution
+                </h2>
+                <div className="mt-6 text-4xl font-bold text-white">
+                  {euro(totalMembre)}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                  Répartition globale
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Encaissements du mois par rubrique
+                </h2>
+              </div>
+
+              {rubriquesGlobales.length === 0 ? (
+                <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+                  Aucune donnée globale disponible pour la session du mois.
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {rubriquesGlobales.map((row) => {
+                    const nbPersonnes = toNumber(row.nb_personnes_concernees);
+
+                    return (
+                      <div
+                        key={`${row.rubrique_code ?? row.rubrique_nom ?? "rubrique"}-${row.session_id}`}
+                        className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4"
+                      >
+                        <div className="text-sm text-cyan-200">
+                          {row.rubrique_nom ?? row.rubrique_code ?? "-"}
+                        </div>
+                        <div className="mt-3 text-2xl font-semibold text-white">
+                          {euro(row.total_encaisse_rubrique)}
+                        </div>
+                        <div className="mt-3 text-sm text-slate-300">
+                          {nbPersonnes} personne{nbPersonnes > 1 ? "s" : ""} concernée{nbPersonnes > 1 ? "s" : ""}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.22)]">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                  Membre connecté
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Contribution de la session du membre connecté par rubrique
+                </h2>
+              </div>
+
+              {membreRubriques.length === 0 ? (
+                <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+                  Aucune contribution trouvée pour le membre connecté sur la session du mois.
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {membreRubriques.map((row) => (
+                    <div
+                      key={`${row.session_id}-${row.rubrique_code ?? row.rubrique_nom ?? "rubrique"}`}
+                      className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4"
+                    >
+                      <div className="text-sm text-cyan-200">
+                        {row.rubrique_nom ?? row.rubrique_code ?? "-"}
+                      </div>
+                      <div className="mt-3 text-2xl font-semibold text-white">
+                        {euro(row.montant_encaisse)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </AppShell>
+  );
+}

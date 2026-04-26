@@ -1,0 +1,277 @@
+﻿"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+type EncaissementRow = {
+  personne_id: string;
+  nom_complet: string;
+  telephone: string | null;
+  email: string | null;
+  type_personne: "MEMBRE" | "PREINSCRIT";
+  mois_reference: string;
+  rubrique_nom: string;
+  montant_attendu: number;
+  montant_encaisse: number;
+  reste: number;
+  statut: "A jour" | "En retard";
+};
+
+function formatEuro(value: number) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
+}
+
+function formatMois(value: string) {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+}
+
+export default function Page() {
+  const [rows, setRows] = useState<EncaissementRow[]>([]);
+  const [savingPdf, setSavingPdf] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [savingPdf, setSavingPdf] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from("v_encaissements_suivi_global")
+        .select("*");
+
+      setRows((data as EncaissementRow[]) || []);
+      setLoading(false);
+    }
+
+    load();
+  }, []);
+
+  async function handleSavePdf() {
+    try {
+      setSavingPdf(true);
+
+      const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+      const jsPDF = (jspdfModule as any).jsPDF;
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      let y = 12;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Suivi global - version simple", 10, y);
+      y += 8;
+
+      const groupes = new Map<string, EncaissementRow[]>();
+
+      rows.forEach((r) => {
+        if (!groupes.has(r.personne_id)) groupes.set(r.personne_id, []);
+        groupes.get(r.personne_id)!.push(r);
+      });
+
+      for (const [_, list] of groupes) {
+        const nom = list[0].nom_complet;
+
+        pdf.setFont("helvetica", "bold");
+        pdf.text(nom, 10, y);
+        y += 5;
+
+        pdf.setFont("helvetica", "normal");
+
+        list
+          .filter((r) => r.montant_encaisse > 0 || r.reste > 0)
+          .forEach((r) => {
+            pdf.text(
+              `- ${formatMois(r.mois_reference)} | ${r.rubrique_nom} | ${formatEuro(r.montant_encaisse)} | reste ${formatEuro(r.reste)}`,
+              12,
+              y
+            );
+            y += 5;
+          });
+
+        y += 4;
+      }
+
+      const blob = pdf.output("blob");
+      const fileName = `suivi-global-${Date.now()}.pdf`;
+      const path = `documents/${fileName}`;
+
+      await supabase.storage.from("documentation").upload(path, blob);
+
+      const { data: folderId } = await supabase.rpc(
+        "fn_get_print_target_folder_id",
+        { p_target: "BUREAU" }
+      );
+
+      await supabase.from("documentation_documents").insert({
+        folder_id: folderId,
+        nom_original: fileName,
+        nom_stockage: fileName,
+        chemin_storage: path,
+        mime_type: "application/pdf",
+        taille_bytes: blob.size,
+        source_type: "IMPRESSION_APP",
+      });
+
+      alert("✅ PDF léger enregistré");
+    } catch (e: any) {
+      alert("Erreur PDF : " + e.message);
+    } finally {
+      setSavingPdf(false);
+    }
+  }
+
+  async function handleSavePdfDocumentation() {
+    try {
+      setSavingPdf(true);
+
+      const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+      const jsPDF = (jspdfModule as any).jsPDF || (jspdfModule as any).default?.jsPDF;
+
+      if (!jsPDF) {
+        throw new Error("jsPDF introuvable.");
+      }
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      const date = new Date().toISOString().slice(0, 10);
+
+      let y = 12;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(15);
+      pdf.text("Suivi global des encaissements", 10, y);
+
+      y += 8;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.text(`Date : ${date}`, 10, y);
+      y += 6;
+      pdf.text(`Total attendu : ${formatEuro(stats.totalAttendu)}`, 10, y);
+      y += 6;
+      pdf.text(`Total encaissé : ${formatEuro(stats.totalEncaisse)}`, 10, y);
+      y += 6;
+      pdf.text(`Reste à payer : ${formatEuro(stats.totalReste)}`, 10, y);
+      y += 10;
+
+      const groupesPdf = groupedRows
+        .map((groupe) => ({
+          ...groupe,
+          rows: groupe.rows.filter(
+            (row) => Number(row.reste || 0) > 0 || Number(row.montant_encaisse || 0) > 0
+          ),
+        }))
+        .filter((groupe) => groupe.rows.length > 0);
+
+      if (groupesPdf.length === 0) {
+        pdf.text("Aucune ligne avec reste ou encaissement.", 10, y);
+        y += 6;
+      }
+
+      for (const groupe of groupesPdf) {
+        if (y > 260) {
+          pdf.addPage();
+          y = 12;
+        }
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(11);
+        pdf.text(`${groupe.nomComplet} (${groupe.typePersonne})`, 10, y);
+        y += 6;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+
+        for (const row of groupe.rows) {
+          if (y > 280) {
+            pdf.addPage();
+            y = 12;
+          }
+
+          const ligne = `- ${formatMois(row.mois_reference)} | ${row.rubrique_nom} | encaissé ${formatEuro(Number(row.montant_encaisse || 0))} | reste ${formatEuro(Number(row.reste || 0))}`;
+          pdf.text(ligne, 12, y);
+          y += 5;
+        }
+
+        y += 4;
+      }
+
+      const blob = pdf.output("blob");
+      const fileName = `suivi-global-${date}.pdf`;
+      const storagePath = `documents/${Date.now()}_${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("documentation")
+        .upload(storagePath, blob, {
+          contentType: "application/pdf",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error("Upload échoué : " + uploadError.message);
+      }
+
+      const { data: folderId, error: folderError } = await supabase.rpc(
+        "fn_get_print_target_folder_id",
+        { p_target: "BUREAU" }
+      );
+
+      if (folderError || !folderId) {
+        throw new Error("Erreur dossier : " + (folderError?.message ?? "Dossier introuvable"));
+      }
+
+      const { error: insertError } = await supabase
+        .from("documentation_documents")
+        .insert({
+          folder_id: folderId,
+          nom_original: fileName,
+          nom_stockage: fileName,
+          chemin_storage: storagePath,
+          mime_type: "application/pdf",
+          taille_bytes: blob.size,
+          source_type: "IMPRESSION_APP",
+        });
+
+      if (insertError) {
+        throw new Error("Erreur enregistrement : " + insertError.message);
+      }
+
+      alert("✅ PDF léger enregistré dans Documentation Bureau.");
+    } catch (error: any) {
+      console.error(error);
+      alert("Erreur PDF : " + (error?.message ?? "Erreur inconnue"));
+    } finally {
+      setSavingPdf(false);
+    }
+  }
+
+  return (
+    <AppShell>
+      <div className="p-6 space-y-6">
+        <button
+          onClick={handleSavePdf}
+          disabled={savingPdf}
+          className="px-4 py-2 bg-white/10 text-white rounded-xl"
+        >
+          {savingPdf ? "..." : "📄 PDF léger"}
+        </button>
+
+        {loading ? (
+          <div>Chargement...</div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((r, i) => (
+              <div key={i} className="text-white">
+                {r.nom_complet} - {r.rubrique_nom} - {formatEuro(r.montant_encaisse)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </AppShell>
+  );
+}
+
+

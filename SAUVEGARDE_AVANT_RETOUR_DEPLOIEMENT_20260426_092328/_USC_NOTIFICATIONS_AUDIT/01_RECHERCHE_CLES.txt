@@ -1,0 +1,584 @@
+﻿=== RECHERCHE CLES USC ===
+
+--- notification / notifications ---
+
+FILE: src\app\(dashboard)\decaissements\page.tsx
+L48: function parsePositiveNumber(value: string) {
+L49: const normalized = String(value ?? "").replace(",", ".").trim();
+L54: function normalize(value: string | null | undefined) {
+L55: return String(value ?? "")
+L70: ].includes(code);
+L115: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L351: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-6 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L377: <div className="rounded-[32px] border border-white/10 bg-slate-950/50 p-6 text-slate-300 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L381: <div className="rounded-[32px] border border-red-500/20 bg-red-500/10 p-6 text-red-200 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L382: Accès refusé. Cette page est réservée exclusivement à President / Tresorier / Admin.
+L409: value={secoursMembreId}
+L410: onChange={(e) => setSecoursMembreId(e.target.value)}
+L413: <option style={{ backgroundColor: "#0f172a", color: "#ffffff" }} value="">
+L420: value={membre.id}
+L436: value={secoursMontant}
+L437: onChange={(e) => setSecoursMontant(e.target.value)}
+L450: value={secoursMotif}
+L451: onChange={(e) => setSecoursMotif(e.target.value)}
+L462: value={secoursCommentaire}
+L463: onChange={(e) => setSecoursCommentaire(e.target.value)}
+L493: value={simpleRubrique}
+L494: onChange={(e) => setSimpleRubrique(e.target.value)}
+L497: <option style={{ backgroundColor: "#0f172a", color: "#ffffff" }} value="">
+L504: value={rubrique.code}
+L517: value={simpleMembreId}
+L518: onChange={(e) => setSimpleMembreId(e.target.value)}
+L521: <option style={{ backgroundColor: "#0f172a", color: "#ffffff" }} value="">
+L528: value={membre.id}
+L544: value={simpleMontant}
+L545: onChange={(e) => setSimpleMontant(e.target.value)}
+L558: value={simpleMotif}
+L559: onChange={(e) => setSimpleMotif(e.target.value)}
+L570: value={simpleCommentaire}
+L571: onChange={(e) => setSimpleCommentaire(e.target.value)}
+L597: value={pretMembreId}
+L598: onChange={(e) => setPretMembreId(e.target.value)}
+L601: <option style={{ backgroundColor: "#0f172a", color: "#ffffff" }} value="">
+L608: value={membre.id}
+L624: value={pretMontant}
+L625: onChange={(e) => setPretMontant(e.target.value)}
+L638: value={pretMotif}
+L639: onChange={(e) => setPretMotif(e.target.value)}
+L650: value={pretCommentaire}
+L651: onChange={(e) => setPretCommentaire(e.target.value)}
+
+FILE: src\app\(dashboard)\documentation\page.tsx
+L13: slug: string;
+L32: function formatBytes(value: number | null | undefined) {
+L33: const n = Number(value ?? 0);
+L44: function formatDate(value?: string) {
+L45: if (!value) return "Date inconnue";
+L46: const d = new Date(value);
+L47: if (Number.isNaN(d.getTime())) return value;
+L72: const value = (mime ?? "").toLowerCase();
+L74: if (value.includes("pdf")) return "PDF";
+L75: if (value.includes("word") || value.includes("document")) return "Word";
+L76: if (value.includes("excel") || value.includes("spreadsheet") || value.includes("sheet")) return "Excel";
+L77: if (value.includes("image")) return "Image";
+L119: "bg-slate-950/55 backdrop-blur-xl shadow-[0_18px_60px_rgba(0,0,0,0.28)]",
+L126: <div className={`absolute inset-0 bg-gradient-to-br ${visual.glow}`} />
+L127: <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+L151: {folder.slug}
+L168: value,
+L172: value: string;
+L176: <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+L177: <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.15),transparent_32%)]" />
+L183: {value}
+L247: .select("id,parent_id,nom,slug,scope_type,owner_membre_id,created_by,created_at")
+L275: safeFolders.find((f) => f.slug === "documentation-association") ?? safeFolders[0];
+L293: () => folders.find((f) => f.parent_id === null && f.slug === "documentation-bureau"),
+L298: () => folders.find((f) => f.parent_id === null && f.slug === "documentation-association"),
+L303: () => folders.find((f) => f.slug === "membres"),
+L418: <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-slate-950/50 p-6 shadow-[0_26px_90px_rgba(0,0,0,0.38)] backdrop-blur-2xl md:p-8">
+L419: <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_26%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.14),transparent_28%)]" />
+L420: <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+L434: et les dossiers strictement privés des membres, dans une interface plus
+L435: claire, plus premium et plus sécurisée.
+L440: <StatCard label="Rôle" value={role} help="profil détecté" />
+L441: <StatCard label="Dossiers" value={String(totalFolders)} help="visibles pour vous" />
+L442: <StatCard label="Documents" value={String(totalDocs)} help="chargés sur la page" />
+L443: <StatCard label="Privés" value={String(myPrivateFolders)} help="dossiers membres" />
+L462: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L484: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L524: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L547: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L613: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+L644: <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.10),transparent_30%)]" />
+L699: <section className="rounded-[32px] border border-white/10 bg-slate-950/50 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+
+FILE: src\app\(dashboard)\suivi-caisse-session\page.tsx
+L29: function formatMontant(value: number) {
+L33: }).format(value);
+L36: function normalize(value: string | null | undefined) {
+L37: return (value ?? "")
+L129: const result = Array.from(map.values()).map((group) => ({
+L155: return cible.includes(q);
+L218: value={search}
+L219: onChange={(e) => setSearch(e.target.value)}
+
+FILE: src\app\admin\mot-de-passe-provisoire\page.tsx
+L120: value={selectedId}
+L121: onChange={(e) => setSelectedId(e.target.value)}
+L124: <option value="">Sélectionner</option>
+L126: <option key={m.id} value={m.id}>
+
+FILE: src\app\admin-notifications\page.tsx
+L9: type NotificationItem = {
+L13: lu: boolean;
+L15: action_url: string | null;
+L18: export default function NotificationsPage() {
+L20: const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+L23: async function chargerNotifications() {
+L27: .from("v_notifications_me")
+L32: setNotifications(data as NotificationItem[]);
+L38: async function handleNotificationClick(notification: NotificationItem) {
+L39: if (!notification.lu) {
+L40: await supabase.rpc("fn_notification_marquer_lue", {
+L41: p_notification_id: notification.id,
+L45: if (notification.action_url) {
+L46: router.push(notification.action_url);
+L50: await chargerNotifications();
+L55: notification: NotificationItem
+L59: if (!notification.lu) {
+L60: await supabase.rpc("fn_notification_marquer_lue", {
+L61: p_notification_id: notification.id,
+L77: await chargerNotifications();
+L84: .channel("notifications-page-realtime")
+L90: table: "notifications",
+L94: await chargerNotifications();
+L113: <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+L114: <h1 className="text-2xl font-semibold">Notifications</h1>
+L116: Les nouvelles notifications apparaissent automatiquement.
+L124: ) : notifications.length === 0 ? (
+L126: Aucune notification.
+L130: {notifications.map((notification) => (
+L132: key={notification.id}
+L134: onClick={() => handleNotificationClick(notification)}
+L137: (notification.lu
+L145: {notification.titre}
+L149: {notification.message}
+L153: {new Date(notification.created_at).toLocaleString("fr-FR")}
+L156: {notification.action_url && (
+L159: href={notification.action_url}
+L160: onClick={(event) => handleActionClick(event, notification)}
+L169: {!notification.lu && (
+
+FILE: src\app\changer-mot-de-passe\page.tsx
+L69: <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L78: value={motDePasse}
+L79: onChange={(e) => setMotDePasse(e.target.value)}
+L87: value={confirmation}
+L88: onChange={(e) => setConfirmation(e.target.value)}
+
+FILE: src\app\dashboard\page.tsx
+L154: if (["ADMIN", "PRESIDENT", "TRESORIER"].includes(profilCharge.role)) {
+L303: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L341: <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+L426: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L431: href="/notifications"
+L434: Ouvrir mes notifications
+L470: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L488: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+
+FILE: src\app\encaissements\page.tsx
+L127: function normalizeName(value: string) {
+L129: return (value ?? "").trim().toLowerCase();
+L141: statut.includes("FERM") ||
+L143: statut.includes("CLOT") ||
+L145: statut.includes("CLOS")
+L375: for (const item of uniques.values()) {
+L517: function setMontant(rubriqueNom: string, value: string) {
+L523: [rubriqueNom]: value,
+L1247: value={expectedPersonneKey}
+L1249: onChange={(e) => setExpectedPersonneKey(e.target.value)}
+L1255: <option value="">Sélectionner</option>
+L1263: value={`${p.type_personne}::${p.id}`}
+L1285: value={expectedRubriqueNom}
+L1287: onChange={(e) => setExpectedRubriqueNom(e.target.value)}
+L1293: <option value="">Sélectionner</option>
+L1297: <option key={r.nom} value={r.nom}>
+L1327: value={expectedMontant}
+L1329: onChange={(e) => setExpectedMontant(e.target.value)}
+L1451: value={selectedKey}
+L1453: onChange={(e) => setSelectedKey(e.target.value)}
+L1459: <option value="">Sélectionner</option>
+L1463: <option key={`${p.type_personne}::${p.id}`} value={`${p.type_personne}::${p.id}`}>
+L1537: value={montants[r.nom] ?? ""}
+L1539: onChange={(e) => setMontant(r.nom, e.target.value)}
+
+FILE: src\app\investissements\page.tsx
+L9: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+
+FILE: src\app\login\page.tsx
+L93: <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L111: value={email}
+L112: onChange={(e) => setEmail(e.target.value)}
+L125: value={motDePasse}
+L126: onChange={(e) => setMotDePasse(e.target.value)}
+L149: <a href="/premiere-connexion" className="text-blue-600 underline">
+
+FILE: src\app\membres\page.tsx
+L20: function normalize(value: string | null | undefined) {
+L21: return (value ?? "")
+L101: return haystack.includes(q);
+L137: value={search}
+L138: onChange={(e) => setSearch(e.target.value)}
+
+FILE: src\app\mise-a-jour\page.tsx
+L54: Plus tard
+
+FILE: src\app\notifications\page.tsx
+L8: type NotificationItem = {
+L12: lu: boolean;
+L14: action_url: string | null;
+L17: export default function NotificationsPage() {
+L19: const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+L22: async function chargerNotifications() {
+L26: .from("v_notifications_me")
+L31: setNotifications(data as NotificationItem[]);
+L38: async function handleNotificationClick(notification: NotificationItem) {
+L39: if (!notification.lu) {
+L40: await supabase.rpc("fn_notification_marquer_lue", {
+L41: p_notification_id: notification.id,
+L45: if (notification.action_url) {
+L46: router.push(notification.action_url);
+L50: await chargerNotifications();
+L65: await chargerNotifications();
+L72: .channel("notifications-page-realtime")
+L78: table: "notifications",
+L82: await chargerNotifications();
+L99: return ( <AppShell> <div className="space-y-6"> <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl"> <h1 className="text-2xl font-semibold">Notifications</h1> <p className="mt-2 text-sm text-slate-400">
+L100: Les nouvelles notifications apparaissent automatiquement. </p> </div>
+L106: ) : notifications.length === 0 ? (
+L108: Aucune notification.
+L112: {notifications.map((notification) => (
+L114: key={notification.id}
+L116: onClick={() => handleNotificationClick(notification)}
+L119: (notification.lu
+L127: {notification.titre}
+L131: {notification.message}
+L135: {new Date(notification.created_at).toLocaleString("fr-FR")}
+L139: {!notification.lu && (
+L146: {notification.action_url && (
+
+FILE: src\app\page-accueil\page.tsx
+L7: ChartColumn,
+L12: } from "lucide-react";
+L38: analytics: ChartColumn,
+L41: notifications: Bell,
+L54: return cookieStore.get(name)?.value;
+L83: profil && ["ADMIN", "PRESIDENT", "TRESORIER"].includes(profil.role)
+L116: titre: "Notifications",
+L117: lien: "/notifications",
+L118: icone: "notifications",
+L119: description: "Centre de notifications",
+L153: titre: "Notifications",
+L154: lien: "/notifications",
+L155: icone: "notifications",
+L156: description: "Mes notifications",
+L165: <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-8 shadow-2xl backdrop-blur-xl">
+L195: <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+
+FILE: src\app\premiere-connexion\page.tsx
+L118: msg.includes("préinscription introuvable") ||
+L119: msg.includes("preinscription introuvable")
+L171: signUpMsg.includes("already registered") ||
+L172: signUpMsg.includes("already exists") ||
+L173: signUpMsg.includes("user already registered")
+L236: message.toLowerCase().includes("non reconnu") ||
+L237: message.toLowerCase().includes("erreur") ||
+L238: message.toLowerCase().includes("invalide") ||
+L239: message.toLowerCase().includes("impossible") ||
+L240: message.toLowerCase().includes("utilisé") ||
+L241: message.toLowerCase().includes("vérifiez");
+L340: value={telephone}
+L341: onChange={(e) => setTelephone(e.target.value)}
+L396: value={email}
+L397: onChange={(e) => setEmail(e.target.value)}
+L412: value={password}
+L413: onChange={(e) => setPassword(e.target.value)}
+
+FILE: src\app\prets\page.tsx
+L78: value={montant}
+L79: onChange={(e) => setMontant(e.target.value)}
+L86: value={motif}
+L87: onChange={(e) => setMotif(e.target.value)}
+
+FILE: src\app\situation-globale\page.tsx
+L15: function normalize(value: string | null | undefined) {
+L16: return (value ?? "")
+L82: const finalRows = [...map.values()].sort((a, b) =>
+L102: .includes(q)
+L127: value={search}
+L128: onChange={(e) => setSearch(e.target.value)}
+
+FILE: src\app\suivi-global\page-backup01.tsx
+L23: function normalize(value: string | null | undefined) {
+L24: return (value ?? "")
+L32: function getMonthTime(value: string) {
+L33: const time = new Date(value).getTime();
+L37: function formatEuro(value: number) {
+L38: return `${Number(value || 0).toLocaleString("fr-FR", {
+L44: function formatMois(value: string) {
+L45: const date = new Date(value);
+L47: return value;
+L148: !nom.includes(search) &&
+L149: !telephone.includes(search) &&
+L150: !email.includes(search)
+L222: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L238: <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+L246: value={searchPersonne}
+L247: onChange={(e) => setSearchPersonne(e.target.value)}
+L258: value={filterType}
+L260: setFilterType(e.target.value as "TOUS" | "MEMBRE" | "PREINSCRIT")
+L264: <option value="TOUS">Tous</option>
+L265: <option value="MEMBRE">Membres</option>
+L266: <option value="PREINSCRIT">Préinscrits</option>
+L275: value={filterRubrique}
+L276: onChange={(e) => setFilterRubrique(e.target.value)}
+L280: <option key={rubrique} value={rubrique}>
+L303: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L310: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L317: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L324: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L331: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L339: <div className="rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl">
+
+FILE: src\app\suivi-global\page.tsx
+L23: function normalize(value: string | null | undefined) {
+L24: return (value ?? "")
+L32: function getMonthTime(value: string) {
+L33: const time = new Date(value).getTime();
+L37: function formatEuro(value: number) {
+L38: return `${Number(value || 0).toLocaleString("fr-FR", {
+L44: function formatMois(value: string) {
+L45: const date = new Date(value);
+L47: return value;
+L148: !nom.includes(search) &&
+L149: !telephone.includes(search) &&
+L150: !email.includes(search)
+L222: <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+L238: <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+L246: value={searchPersonne}
+L247: onChange={(e) => setSearchPersonne(e.target.value)}
+L258: value={filterType}
+L260: setFilterType(e.target.value as "TOUS" | "MEMBRE" | "PREINSCRIT")
+L264: <option value="TOUS">Tous</option>
+L265: <option value="MEMBRE">Membres</option>
+L266: <option value="PREINSCRIT">Préinscrits</option>
+L275: value={filterRubrique}
+L276: onChange={(e) => setFilterRubrique(e.target.value)}
+L280: <option key={rubrique} value={rubrique}>
+L303: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L310: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L317: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L324: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L331: <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+L339: <div className="rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl">
+
+FILE: src\app\synthese-caisse\page.tsx
+L38: if (s.includes("FERM") || s.includes("CLOT") || s.includes("CLOS")) {
+
+FILE: src\app\page.tsx
+L14: return cookieStore.get(name)?.value
+
+FILE: src\components\layout\AppShell.tsx
+L22: { href: "/notifications", label: "Notifications" },
+L50: href: "/admin-notifications",
+L51: label: "Admin notifications",
+L60: .from("v_notifications_non_lues_count")
+L65: setCount(data.total_non_lues || 0);
+L96: .channel("notifications-badge-realtime")
+L102: table: "notifications",
+L125: <div className="absolute inset-0 bg-[#020617]" />
+L126: <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.15),transparent_30%)]" />
+L127: <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_30%)]" />
+L131: <aside className="hidden w-72 flex-col border-r border-white/10 bg-slate-950/80 backdrop-blur-xl lg:flex">
+L152: {lien.href === "/notifications" && count > 0 && (
+L198: {lien.href === "/notifications" && count > 0 && (
+L211: <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/60 p-4 backdrop-blur">
+L224: <div className="absolute -right-1 -top-1 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+
+--- dashboard ---
+
+FILE: src\app\dashboard\page.tsx
+L22: type DashboardGlobal = {
+L56: type DashboardMembre = {
+L72: type DashboardSecoursRecu = {
+L78: type DashboardPretEnCours = {
+L112: export default function DashboardPage() {
+L116: const [dashboardGlobal, setDashboardGlobal] = useState<DashboardGlobal | null>(null);
+L117: const [dashboardMembre, setDashboardMembre] = useState<DashboardMembre | null>(null);
+L118: const [dashboardSecoursRecu, setDashboardSecoursRecu] = useState<DashboardSecoursRecu | null>(null);
+L119: const [dashboardPretsEnCours, setDashboardPretsEnCours] = useState<DashboardPretEnCours[]>([]);
+L155: const { data, error } = await supabase.rpc("fn_dashboard_global_admin");
+L163: setDashboardGlobal(data && data.length > 0 ? data[0] : null);
+L166: dashboardMembreRes,
+L170: supabase.rpc("fn_dashboard_membre_connecte"),
+L172: .from("v_dashboard_montant_secours_recu")
+L177: .from("v_dashboard_prets_en_cours")
+L182: if (dashboardMembreRes.error) {
+L183: setErreur(dashboardMembreRes.error.message);
+L188: setDashboardMembre(
+L189: dashboardMembreRes.data && dashboardMembreRes.data.length > 0
+L190: ? dashboardMembreRes.data[0]
+L195: console.error("Dashboard secours reçu:", secoursRecuRes.error.message);
+L197: setDashboardSecoursRecu(
+L198: (secoursRecuRes.data as DashboardSecoursRecu | null) ?? null
+L203: console.error("Dashboard prêts en cours:", pretsEnCoursRes.error.message);
+L205: setDashboardPretsEnCours(
+L206: (pretsEnCoursRes.data as DashboardPretEnCours[] | null) ?? []
+L225: return dashboardPretsEnCours.reduce((sum, item) => sum + Number(item.reste_global ?? 0), 0);
+L226: }, [dashboardPretsEnCours]);
+L228: const cartesGlobales = dashboardGlobal
+L232: valeur: formatMontant(dashboardGlobal.solde_caisse_investissements),
+L237: valeur: formatMontant(dashboardGlobal.solde_caisse_epargne_investisseurs),
+L242: valeur: String(dashboardGlobal.nb_prets_en_cours ?? 0),
+L243: sousTexte: "Reste global " + formatMontant(dashboardGlobal.reste_global),
+L247: valeur: formatMontant(dashboardGlobal.capital_total_investi),
+L248: sousTexte: "Investisseurs " + String(dashboardGlobal.nb_investisseurs ?? 0),
+L252: valeur: formatMontant(dashboardGlobal.interets_generes),
+L253: sousTexte: "Total disponible " + formatMontant(dashboardGlobal.total_disponible),
+L257: valeur: String(dashboardGlobal.nb_decisions_en_attente ?? 0),
+L258: sousTexte: "Bilans annuels " + String(dashboardGlobal.nb_bilans_annuels ?? 0),
+L263: const cartesMembre = dashboardMembre
+L268: dashboardPretsEnCours.length > 0
+L269: ? dashboardPretsEnCours.length
+L270: : (dashboardMembre.nb_prets_en_cours ?? dashboardMembre.nb_prets ?? 0)
+L275: dashboardPretsEnCours.length > 0
+L277: : dashboardMembre.reste_a_payer
+L282: valeur: formatMontant(dashboardMembre.reste_a_payer),
+L283: sousTexte: "Remboursé " + formatMontant(dashboardMembre.total_rembourse),
+L287: valeur: formatMontant(dashboardSecoursRecu?.montant_secours_recu ?? 0),
+L288: sousTexte: "Dernière aide " + formatDateHeure(dashboardSecoursRecu?.dernier_secours_recu_le),
+L292: valeur: formatMontant(dashboardMembre.interets_generes),
+L293: sousTexte: "Disponible " + formatMontant(dashboardMembre.total_disponible),
+L469: {dashboardGlobal ? (
+L487: {dashboardMembre ? (
+
+FILE: src\app\page-accueil\page.tsx
+L9: LayoutDashboard,
+L42: dashboard: LayoutDashboard,
+L123: icone: "dashboard",
+L129: titre: "Dashboard",
+L130: lien: "/dashboard",
+L131: icone: "dashboard",
+
+FILE: src\app\prets\page.tsx
+L15: const [dashboard, setDashboard] = useState<any>(null);
+L29: const { data } = await supabase.rpc("fn_dashboard_membre_connecte");
+L30: setDashboard(data?.[0] || null);
+
+FILE: src\components\layout\AppShell.tsx
+L14: { href: "/dashboard", label: "Dashboard" },
+
+--- menu / sidebar / nav ---
+
+FILE: src\app\(dashboard)\decaissements\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L349: <AppShell>
+L718: </AppShell>
+
+FILE: src\app\(dashboard)\documentation\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L415: <AppShell>
+L419: <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_26%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.14),transparent_28%)]" />
+L725: </AppShell>
+
+FILE: src\app\(dashboard)\suivi-caisse-session\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L166: <AppShell>
+L388: </AppShell>
+
+FILE: src\app\admin\mot-de-passe-provisoire\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L100: <AppShell>
+L170: </AppShell>
+
+FILE: src\app\admin-notifications\page.tsx
+L5: import { useRouter } from "next/navigation";
+L6: import AppShell from "@/components/layout/AppShell";
+L111: <AppShell>
+L180: </AppShell>
+
+FILE: src\app\changer-mot-de-passe\page.tsx
+L4: import { useRouter } from "next/navigation";
+
+FILE: src\app\dashboard\page.tsx
+L4: import { useRouter } from "next/navigation";
+L6: import AppShell from "@/components/layout/AppShell";
+L301: <AppShell>
+L507: </AppShell>
+
+FILE: src\app\encaissements\page.tsx
+L7: import AppShell from "@/components/layout/AppShell";
+L1009: <AppShell>
+L1851: </AppShell>
+
+FILE: src\app\investissements\page.tsx
+L3: import AppShell from "@/components/layout/AppShell";
+L7: <AppShell>
+L23: </AppShell>
+
+FILE: src\app\login\page.tsx
+L4: import { useRouter } from "next/navigation";
+
+FILE: src\app\membres\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L117: <AppShell>
+L181: </AppShell>
+
+FILE: src\app\mise-a-jour\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L32: <AppShell>
+L66: </AppShell>
+
+FILE: src\app\notifications\page.tsx
+L4: import { useRouter } from "next/navigation";
+L5: import AppShell from "@/components/layout/AppShell";
+L99: return ( <AppShell> <div className="space-y-6"> <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl"> <h1 className="text-2xl font-semibold">Notifications</h1> <p className="mt-2 text-sm text-slate-400">
+L156: </AppShell>
+
+FILE: src\app\page-accueil\page.tsx
+L3: import { redirect } from "next/navigation";
+L13: import AppShell from "@/components/layout/AppShell";
+L163: <AppShell>
+L234: </AppShell>
+
+FILE: src\app\premiere-connexion\page.tsx
+L4: import { useRouter } from "next/navigation";
+L267: <div style={{ marginBottom: 20 }}>
+L280: marginBottom: 12,
+L315: marginBottom: 18,
+L325: <div style={{ marginBottom: 14 }}>
+L329: marginBottom: 6,
+L379: marginBottom: 10,
+L404: marginBottom: 10,
+L420: marginBottom: 10,
+
+FILE: src\app\prets\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L57: <AppShell>
+L104: </AppShell>
+
+FILE: src\app\situation-globale\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L107: <AppShell>
+L180: </AppShell>
+
+FILE: src\app\suivi-global\page-backup01.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L220: <AppShell>
+L597: </AppShell>
+
+FILE: src\app\suivi-global\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L220: <AppShell>
+L609: </AppShell>
+
+FILE: src\app\synthese-caisse\page.tsx
+L4: import AppShell from "@/components/layout/AppShell";
+L113: <AppShell>
+L254: </AppShell>
+
+FILE: src\app\page.tsx
+L3: import { redirect } from 'next/navigation'
+
+FILE: src\components\layout\AppShell.tsx
+L4: import { usePathname } from "next/navigation";
+L26: export default function AppShell({ children }: { children: React.ReactNode }) {
+L28: const [menuOpen, setMenuOpen] = useState(false);
+L127: <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_30%)]" />
+L134: <nav className="flex-1 space-y-2 px-4">
+L161: </nav>
+L164: {menuOpen && (
+L167: onClick={() => setMenuOpen(false)}
+L174: (menuOpen ? "translate-x-0" : "-translate-x-full")
+L187: onClick={() => setMenuOpen(false)}
+L212: <button onClick={() => setMenuOpen(true)} className="lg:hidden">

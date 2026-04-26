@@ -1,0 +1,90 @@
+﻿import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { supabase } from "@/lib/supabaseClient";
+
+export async function savePdfToDocumentation({
+  element,
+  fileName,
+  target = "MEMBRE", // MEMBRE | BUREAU | ASSOCIATION
+}: {
+  element: HTMLElement;
+  fileName: string;
+  target?: "MEMBRE" | "BUREAU" | "ASSOCIATION";
+}) {
+  if (!element) throw new Error("Element introuvable");
+
+  // 1. Capture HTML
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+  });
+
+  const imgData = canvas.toDataURL("image/png");
+
+  // 2. Génération PDF
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  const imgWidth = 210;
+  const pageHeight = 297;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = 0;
+
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+
+  // 3. Blob
+  const blob = pdf.output("blob");
+
+  // 4. Nom fichier unique
+  const filePath = `documents/${Date.now()}_${fileName}.pdf`;
+
+  // 5. Upload Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from("documentation")
+    .upload(filePath, blob, {
+      contentType: "application/pdf",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error("Upload échoué : " + uploadError.message);
+  }
+
+  // 6. Récupérer dossier cible
+  const { data: folderId, error: folderError } = await supabase.rpc(
+    "fn_get_print_target_folder_id",
+    { p_target: target }
+  );
+
+  if (folderError || !folderId) {
+    throw new Error("Erreur dossier : " + folderError?.message);
+  }
+
+  // 7. Enregistrer en base
+  const { error: insertError } = await supabase
+    .from("documentation_documents")
+    .insert({
+      folder_id: folderId,
+      nom_original: fileName,
+      nom_stockage: fileName,
+      chemin_storage: filePath,
+      mime_type: "application/pdf",
+      taille_bytes: blob.size,
+      source_type: "IMPRESSION_APP",
+    });
+
+  if (insertError) {
+    throw new Error("Erreur enregistrement : " + insertError.message);
+  }
+
+  return true;
+}
