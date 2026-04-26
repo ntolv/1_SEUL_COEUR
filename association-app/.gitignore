@@ -2,3 +2,9 @@
 .vercel
 node_modules
 .env.local
+
+*.bak_*
+*.backup-*.tsx
+*.backup_*
+*.log
+SAUVEGARDE_AVANT_RETOUR_DEPLOIEMENT_*/

@@ -210,7 +210,7 @@ export default function SyntheseCaissePage() {
     try {
       setSavingPdf(true);
 
-      const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+      const jspdfModule = await import("jspdf");
       const jsPDF = (jspdfModule as any).jsPDF || (jspdfModule as any).default?.jsPDF;
 
       if (!jsPDF) {
@@ -459,3 +459,5 @@ export default function SyntheseCaissePage() {
     </AppShell>
   );
 }
+
+

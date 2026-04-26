@@ -20,7 +20,7 @@ export async function savePdfToDocumentation({
   const html2canvasModule = await import("html2canvas");
   const html2canvas = html2canvasModule.default;
 
-  const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+  const jspdfModule = await import("jspdf");
   const jsPDF = (jspdfModule as any).jsPDF || (jspdfModule as any).default?.jsPDF;
 
   if (!jsPDF) {
@@ -198,4 +198,6 @@ export async function savePdfToDocumentation({
     }
   }
 }
+
+
 
