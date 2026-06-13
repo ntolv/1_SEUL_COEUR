@@ -15,6 +15,7 @@ const liensBase = [
   { href: "/synthese-caisse", label: "Synthèse caisse" },
   { href: "/membres", label: "Membres" },
   { href: "/encaissements", label: "Encaissements" },
+  { href: "/encaissements/historique", label: "Historique encaissements" },
   { href: "/suivi-caisse-session", label: "Suivi caisse session" },
   { href: "/suivi-global", label: "Suivi global" },
   { href: "/prets", label: "Prêts" },
@@ -236,3 +237,4 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+

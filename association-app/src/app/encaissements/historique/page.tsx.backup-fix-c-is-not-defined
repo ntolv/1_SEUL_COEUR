@@ -1,0 +1,1639 @@
+﻿"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { supabase } from "@/lib/supabaseClient";
+
+type MoisRow = {
+  id: number;
+  mois: string;
+  statut: string;
+};
+
+type PersonneRow = {
+  id: string;
+  nom_complet: string;
+  telephone: string | null;
+  type_personne: "MEMBRE" | "PREINSCRIT";
+};
+
+type EncaissementRow = {
+  operation_id: number;
+  mois_id: number;
+  mois: string;
+  statut_caisse: string;
+  membre_id: string | null;
+  nom_complet: string | null;
+  montant_total: number | null;
+  date_paiement: string | null;
+  mode_paiement: string | null;
+  reference_paiement: string | null;
+  note: string | null;
+  statut_operation: string;
+  caisse_ouverte: boolean;
+  peut_corriger: boolean;
+  peut_annuler: boolean;
+};
+
+type RubriqueRow = {
+  id: string | number | null;
+  code: string | null;
+  nom: string;
+};
+
+type VentilationRow = {
+  ventilation_id: number;
+  operation_id: number;
+  mois_id: number;
+  mois: string;
+  statut_caisse: string;
+  membre_id: string | null;
+  nom_complet: string | null;
+  attendu_id: number;
+  rubrique_code: string | null;
+  rubrique_nom: string | null;
+  montant_rubrique: number | null;
+  montant_total_operation: number | null;
+  statut_operation: string;
+  peut_corriger_rubrique: boolean;
+};
+
+type CorrectionHistoriqueRow = {
+  correction_id: string;
+  operation_id: number;
+  ventilation_id: number | null;
+  type_correction: string;
+  rubrique_code: string | null;
+  rubrique_nom: string | null;
+  ancien_montant_rubrique: number | null;
+  nouveau_montant_rubrique: number | null;
+  ancien_montant: number | null;
+  nouveau_montant: number | null;
+  motif: string | null;
+  corrige_par_nom: string | null;
+  corrige_le: string | null;
+};
+
+type AjustementHistoriqueRow = {
+  ajustement_id: string;
+  operation_source_id: number | null;
+  mois_source: string | null;
+  mois_ajustement: string | null;
+  type_ajustement: string;
+  montant: number | null;
+  impact_net: number | null;
+  rubrique_source: string | null;
+  rubrique_destination: string | null;
+  membre_nom: string | null;
+  motif: string | null;
+  cree_par_nom: string | null;
+  cree_le: string | null;
+};
+
+function euro(value: number | string | null | undefined) {
+  const n = Number(value ?? 0);
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+  }).format(n);
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR").format(new Date(value));
+}
+
+function formatMois(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function statutBadge(statut: string | null | undefined) {
+  const s = String(statut ?? "VALIDE").toUpperCase();
+
+  if (s === "ANNULE") {
+    return "🔴 ANNULÉ";
+  }
+
+  if (s === "CORRIGE") {
+    return "🟠 CORRIGÉ";
+  }
+
+  return "🟢 VALIDÉ";
+}
+
+function caisseBadge(statut: string | null | undefined) {
+  const s = String(statut ?? "").toLowerCase();
+
+  if (s.includes("cloture")) {
+    return "🔒 CLÔTURÉE";
+  }
+
+  return "🟢 OUVERTE";
+}
+
+function correctionAuditBadge(c: CorrectionHistoriqueRow) {
+  if (c.est_annulee) {
+    return {
+      label: "CORRECTION ANNULÉE",
+      className: "border-red-700/40 bg-red-500/10 text-red-100",
+    };
+  }
+
+  if (c.correction_parent_id) {
+    return {
+      label: "CONTRE-CORRECTION",
+      className: "border-emerald-700/40 bg-emerald-500/10 text-emerald-100",
+    };
+  }
+
+  if (String(c.type_correction).toUpperCase() === "ANNULATION") {
+    return {
+      label: "ANNULATION ENCAISSEMENT",
+      className: "border-red-700/40 bg-red-500/10 text-red-100",
+    };
+  }
+
+  return {
+    label: "CORRECTION",
+    className: "border-cyan-700/40 bg-cyan-500/10 text-cyan-100",
+  };
+}
+
+function ajustementAuditBadge(a: AjustementHistoriqueRow) {
+  const type = String(a.type_ajustement ?? "").toUpperCase();
+
+  if (type === "AJOUT_MONTANT") {
+    return {
+      label: "AJUSTEMENT +",
+      className: "border-emerald-700/40 bg-emerald-500/10 text-emerald-100",
+    };
+  }
+
+  if (type === "RETRAIT_MONTANT") {
+    return {
+      label: "AJUSTEMENT -",
+      className: "border-amber-700/40 bg-amber-500/10 text-amber-100",
+    };
+  }
+
+  if (type === "TRANSFERT_RUBRIQUE") {
+    return {
+      label: "TRANSFERT RUBRIQUE",
+      className: "border-violet-700/40 bg-violet-500/10 text-violet-100",
+    };
+  }
+
+  return {
+    label: "AJUSTEMENT",
+    className: "border-amber-700/40 bg-amber-500/10 text-amber-100",
+  };
+}
+
+function getPersonKey(p: Pick<PersonneRow, "id" | "type_personne">) {
+  return `${p.type_personne}::${p.id}`;
+}
+
+export default function HistoriqueEncaissementsPage() {
+  const [loading, setLoading] = useState(true);
+  const [mois, setMois] = useState<MoisRow[]>([]);
+  const [personnes, setPersonnes] = useState<PersonneRow[]>([]);
+  const [rubriques, setRubriques] = useState<RubriqueRow[]>([]);
+
+  const [selectedMoisId, setSelectedMoisId] = useState("");
+  const [selectedPersonKey, setSelectedPersonKey] = useState("");
+
+  const [operations, setOperations] = useState<EncaissementRow[]>([]);
+  const [ventilations, setVentilations] = useState<VentilationRow[]>([]);
+
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [actionOpenId, setActionOpenId] = useState<number | null>(null);
+  const [correctionOperation, setCorrectionOperation] = useState<EncaissementRow | null>(null);
+  const [correctionMontant, setCorrectionMontant] = useState("");
+  const [correctionMotif, setCorrectionMotif] = useState("");
+  const [busyCorrection, setBusyCorrection] = useState(false);
+
+  const [ajustementOperation, setAjustementOperation] = useState<EncaissementRow | null>(null);
+  const [ajustementType, setAjustementType] = useState<"AJOUT_MONTANT" | "RETRAIT_MONTANT" | "TRANSFERT_RUBRIQUE">("RETRAIT_MONTANT");
+  const [ajustementMontant, setAjustementMontant] = useState("");
+  const [ajustementRubriqueSource, setAjustementRubriqueSource] = useState("");
+  const [ajustementRubriqueDestination, setAjustementRubriqueDestination] = useState("");
+  const [ajustementMotif, setAjustementMotif] = useState("");
+  const [busyAjustement, setBusyAjustement] = useState(false);
+
+  const [rubriqueOperation, setRubriqueOperation] = useState<EncaissementRow | null>(null);
+  const [rubriqueVentilationId, setRubriqueVentilationId] = useState("");
+  const [rubriqueMontant, setRubriqueMontant] = useState("");
+  const [rubriqueMotif, setRubriqueMotif] = useState("");
+  const [busyRubrique, setBusyRubrique] = useState(false);
+
+  const [annulationOperation, setAnnulationOperation] = useState<EncaissementRow | null>(null);
+  const [annulationMotif, setAnnulationMotif] = useState("");
+  const [busyAnnulation, setBusyAnnulation] = useState(false);
+
+  const [historiqueOperation, setHistoriqueOperation] = useState<EncaissementRow | null>(null);
+  const [historiqueCorrections, setHistoriqueCorrections] = useState<CorrectionHistoriqueRow[]>([]);
+  const [historiqueAjustements, setHistoriqueAjustements] = useState<AjustementHistoriqueRow[]>([]);
+  const [busyHistorique, setBusyHistorique] = useState(false);
+
+  const [correctionAAnnuler, setCorrectionAAnnuler] = useState<CorrectionHistoriqueRow | null>(null);
+  const [motifAnnulationCorrection, setMotifAnnulationCorrection] = useState("");
+  const [busyAnnulationCorrection, setBusyAnnulationCorrection] = useState(false);
+
+  const selectedPerson = useMemo(() => {
+    if (!selectedPersonKey) return null;
+    const [type, id] = selectedPersonKey.split("::");
+    return personnes.find((p) => p.id === id && p.type_personne === type) ?? null;
+  }, [selectedPersonKey, personnes]);
+
+  const filteredOperations = useMemo(() => {
+    return operations.filter((op) => {
+      const matchMois = selectedMoisId ? Number(op.mois_id) === Number(selectedMoisId) : true;
+      const matchPerson = selectedPerson ? op.membre_id === selectedPerson.id : true;
+      return matchMois && matchPerson;
+    });
+  }, [operations, selectedMoisId, selectedPerson]);
+
+  const filteredVentilations = useMemo(() => {
+    return ventilations.filter((v) => {
+      const matchMois = selectedMoisId ? Number(v.mois_id) === Number(selectedMoisId) : true;
+      const matchPerson = selectedPerson ? v.membre_id === selectedPerson.id : true;
+      return matchMois && matchPerson;
+    });
+  }, [ventilations, selectedMoisId, selectedPerson]);
+
+  const operationVentilations = useMemo(() => {
+    if (!rubriqueOperation) return [];
+    return ventilations.filter((v) => v.operation_id === rubriqueOperation.operation_id);
+  }, [rubriqueOperation, ventilations]);
+
+  const selectedRubriqueVentilation = useMemo(() => {
+    if (!rubriqueVentilationId) return null;
+    return operationVentilations.find((v) => String(v.ventilation_id) === String(rubriqueVentilationId)) ?? null;
+  }, [rubriqueVentilationId, operationVentilations]);
+
+  const summary = useMemo(() => {
+    return filteredOperations.reduce(
+      (acc, op) => {
+        const montant = Number(op.montant_total ?? 0);
+        const statut = String(op.statut_operation ?? "VALIDE").toUpperCase();
+
+        if (statut === "ANNULE") {
+          acc.annule += montant;
+        } else {
+          acc.encaisse += montant;
+        }
+
+        if (statut === "CORRIGE") {
+          acc.corrige += montant;
+        }
+
+        return acc;
+      },
+      { encaisse: 0, corrige: 0, annule: 0 }
+    );
+  }, [filteredOperations]);
+
+  async function chargerMois() {
+    const { data, error } = await supabase
+      .from("encaissement_mois")
+      .select("id, mois, statut")
+      .order("mois", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    setMois((data ?? []) as MoisRow[]);
+  }
+
+  async function chargerPersonnes() {
+    const [{ data: membres, error: errM }, { data: preinscrits, error: errP }] =
+      await Promise.all([
+        supabase
+          .from("membres")
+          .select("id, nom_complet, telephone")
+          .order("nom_complet", { ascending: true }),
+        supabase
+          .from("membres_preinscriptions")
+          .select("id, nom_complet, telephone")
+          .order("nom_complet", { ascending: true }),
+      ]);
+
+    if (errM) throw new Error(errM.message);
+    if (errP) throw new Error(errP.message);
+
+    const list: PersonneRow[] = [
+      ...((membres ?? []).map((m: any) => ({
+        id: String(m.id),
+        nom_complet: String(m.nom_complet ?? ""),
+        telephone: m.telephone ?? null,
+        type_personne: "MEMBRE" as const,
+      }))),
+      ...((preinscrits ?? []).map((p: any) => ({
+        id: String(p.id),
+        nom_complet: String(p.nom_complet ?? ""),
+        telephone: p.telephone ?? null,
+        type_personne: "PREINSCRIT" as const,
+      }))),
+    ];
+
+    setPersonnes(
+      list.sort((a, b) =>
+        a.nom_complet.localeCompare(b.nom_complet, "fr", { sensitivity: "base" })
+      )
+    );
+  }
+
+  async function chargerRubriques() {
+    const { data, error } = await supabase
+      .from("encaissement_rubriques")
+      .select("id, code, nom, est_active")
+      .eq("est_active", true)
+      .order("nom", { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    setRubriques(
+      (data ?? []).map((r: any) => ({
+        id: r.id ?? null,
+        code: r.code ?? null,
+        nom: String(r.nom ?? ""),
+      }))
+    );
+  }
+
+  async function chargerOperations() {
+    const { data, error } = await supabase
+      .from("v_encaissement_operations_suivi")
+      .select("*")
+      .order("date_paiement", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    setOperations((data ?? []) as EncaissementRow[]);
+  }
+
+  async function chargerVentilations() {
+    const { data, error } = await supabase
+      .from("v_encaissement_ventilations_suivi")
+      .select("*")
+      .order("mois", { ascending: false })
+      .order("operation_id", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    setVentilations((data ?? []) as VentilationRow[]);
+  }
+
+  async function chargerTout() {
+    try {
+      setLoading(true);
+      setError(null);
+      await Promise.all([
+        chargerMois(),
+        chargerPersonnes(),
+        chargerRubriques(),
+        chargerOperations(),
+        chargerVentilations(),
+      ]);
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur de chargement.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    chargerTout();
+  }, []);
+
+  function ouvrirCorrection(op: EncaissementRow) {
+    setActionOpenId(null);
+
+    if (!op.peut_corriger) {
+      setError("Cette opération ne peut pas être corrigée directement. Si la caisse est clôturée, utilisez un ajustement.");
+      return;
+    }
+
+    setCorrectionOperation(op);
+    setCorrectionMontant(String(op.montant_total ?? ""));
+    setCorrectionMotif("");
+    setMessage(null);
+    setError(null);
+  }
+
+  function fermerCorrection() {
+    setCorrectionOperation(null);
+    setCorrectionMontant("");
+    setCorrectionMotif("");
+    setBusyCorrection(false);
+  }
+
+  async function validerCorrectionMontant() {
+    if (!correctionOperation) return;
+
+    const nouveauMontant = Number(correctionMontant || 0);
+
+    if (nouveauMontant <= 0) {
+      setError("Le nouveau montant doit être supérieur à 0.");
+      return;
+    }
+
+    if (!correctionMotif.trim() || correctionMotif.trim().length < 5) {
+      setError("Le motif est obligatoire, minimum 5 caractères.");
+      return;
+    }
+
+    setBusyCorrection(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase.rpc("fn_corriger_encaissement_operation", {
+        p_operation_id: correctionOperation.operation_id,
+        p_nouveau_montant_total: nouveauMontant,
+        p_mode_paiement: correctionOperation.mode_paiement,
+        p_reference_paiement: correctionOperation.reference_paiement,
+        p_note: correctionOperation.note,
+        p_motif: correctionMotif.trim(),
+      });
+
+      if (error) throw new Error(error.message);
+
+      setMessage("Correction enregistrée avec succès.");
+      fermerCorrection();
+      await Promise.all([chargerOperations(), chargerVentilations()]);
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur lors de la correction.");
+    } finally {
+      setBusyCorrection(false);
+    }
+  }
+
+  function ouvrirAjustement(op: EncaissementRow) {
+    setActionOpenId(null);
+
+    if (op.caisse_ouverte || String(op.statut_operation).toUpperCase() === "ANNULE") {
+      setError("Ajustement disponible uniquement sur une opération non annulée dont la caisse est clôturée.");
+      return;
+    }
+
+    setAjustementOperation(op);
+    setAjustementType("RETRAIT_MONTANT");
+    setAjustementMontant("");
+    setAjustementRubriqueSource("");
+    setAjustementRubriqueDestination("");
+    setAjustementMotif("");
+    setMessage(null);
+    setError(null);
+  }
+
+  function fermerAjustement() {
+    setAjustementOperation(null);
+    setAjustementType("RETRAIT_MONTANT");
+    setAjustementMontant("");
+    setAjustementRubriqueSource("");
+    setAjustementRubriqueDestination("");
+    setAjustementMotif("");
+    setBusyAjustement(false);
+  }
+
+  async function validerAjustement() {
+    if (!ajustementOperation) return;
+
+    const montant = Number(ajustementMontant || 0);
+
+    if (montant <= 0) {
+      setError("Le montant de l’ajustement doit être supérieur à 0.");
+      return;
+    }
+
+    if (!ajustementRubriqueSource) {
+      setError("La rubrique source est obligatoire.");
+      return;
+    }
+
+    if (ajustementType === "TRANSFERT_RUBRIQUE" && !ajustementRubriqueDestination) {
+      setError("La rubrique destination est obligatoire pour un transfert.");
+      return;
+    }
+
+    if (
+      ajustementType === "TRANSFERT_RUBRIQUE" &&
+      ajustementRubriqueSource === ajustementRubriqueDestination
+    ) {
+      setError("La rubrique source et la rubrique destination doivent être différentes.");
+      return;
+    }
+
+    if (!ajustementMotif.trim() || ajustementMotif.trim().length < 5) {
+      setError("Le motif est obligatoire, minimum 5 caractères.");
+      return;
+    }
+
+    setBusyAjustement(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const moisOuvert = mois.find((m) => String(m.statut).toLowerCase() === "ouvert");
+
+      if (!moisOuvert) {
+        throw new Error("Aucune caisse ouverte disponible pour enregistrer l’ajustement.");
+      }
+
+      const { error } = await supabase.rpc("fn_creer_ajustement_encaissement_operation", {
+        p_mois_ajustement_id: moisOuvert.id,
+        p_type_ajustement: ajustementType,
+        p_montant: montant,
+        p_motif: ajustementMotif.trim(),
+        p_encaissement_operation_source_id: ajustementOperation.operation_id,
+        p_mois_source_id: ajustementOperation.mois_id,
+        p_membre_id: ajustementOperation.membre_id,
+        p_rubrique_source: ajustementRubriqueSource,
+        p_rubrique_destination:
+          ajustementType === "TRANSFERT_RUBRIQUE" ? ajustementRubriqueDestination : null,
+      });
+
+      if (error) throw new Error(error.message);
+
+      setMessage("Ajustement enregistré avec succès.");
+      fermerAjustement();
+      await Promise.all([chargerOperations(), chargerVentilations()]);
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur lors de l’ajustement.");
+    } finally {
+      setBusyAjustement(false);
+    }
+  }
+
+  function ouvrirCorrectionRubrique(op: EncaissementRow) {
+    setActionOpenId(null);
+
+    if (!op.peut_corriger) {
+      setError("Correction rubrique indisponible : caisse clôturée ou opération annulée.");
+      return;
+    }
+
+    const vents = ventilations.filter((v) => v.operation_id === op.operation_id);
+
+    if (vents.length === 0) {
+      setError("Aucune rubrique trouvée pour cette opération.");
+      return;
+    }
+
+    setRubriqueOperation(op);
+    setRubriqueVentilationId(String(vents[0].ventilation_id));
+    setRubriqueMontant(String(vents[0].montant_rubrique ?? ""));
+    setRubriqueMotif("");
+    setMessage(null);
+    setError(null);
+  }
+
+  function fermerCorrectionRubrique() {
+    setRubriqueOperation(null);
+    setRubriqueVentilationId("");
+    setRubriqueMontant("");
+    setRubriqueMotif("");
+    setBusyRubrique(false);
+  }
+
+  async function validerCorrectionRubrique() {
+    if (!rubriqueOperation || !selectedRubriqueVentilation) return;
+
+    const nouveauMontant = Number(rubriqueMontant || 0);
+
+    if (nouveauMontant < 0) {
+      setError("Le nouveau montant de rubrique doit être supérieur ou égal à 0.");
+      return;
+    }
+
+    if (!rubriqueMotif.trim() || rubriqueMotif.trim().length < 5) {
+      setError("Le motif est obligatoire, minimum 5 caractères.");
+      return;
+    }
+
+    setBusyRubrique(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase.rpc("fn_corriger_ventilation_encaissement", {
+        p_ventilation_id: selectedRubriqueVentilation.ventilation_id,
+        p_nouveau_montant: nouveauMontant,
+        p_motif: rubriqueMotif.trim(),
+      });
+
+      if (error) throw new Error(error.message);
+
+      setMessage("Correction de rubrique enregistrée avec succès.");
+      fermerCorrectionRubrique();
+      await Promise.all([chargerOperations(), chargerVentilations()]);
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur lors de la correction de rubrique.");
+    } finally {
+      setBusyRubrique(false);
+    }
+  }
+
+  function ouvrirAnnulation(op: EncaissementRow) {
+    setActionOpenId(null);
+
+    if (!op.peut_annuler) {
+      setError("Cette opération ne peut pas être annulée. Si la caisse est clôturée, utilisez un ajustement.");
+      return;
+    }
+
+    setAnnulationOperation(op);
+    setAnnulationMotif("");
+    setMessage(null);
+    setError(null);
+  }
+
+  function fermerAnnulation() {
+    setAnnulationOperation(null);
+    setAnnulationMotif("");
+    setBusyAnnulation(false);
+  }
+
+  async function validerAnnulation() {
+    if (!annulationOperation) return;
+
+    if (!annulationMotif.trim() || annulationMotif.trim().length < 5) {
+      setError("Le motif est obligatoire, minimum 5 caractères.");
+      return;
+    }
+
+    setBusyAnnulation(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase.rpc("fn_annuler_encaissement_operation", {
+        p_operation_id: annulationOperation.operation_id,
+        p_motif: annulationMotif.trim(),
+      });
+
+      if (error) throw new Error(error.message);
+
+      setMessage("Encaissement annulé avec succès.");
+      fermerAnnulation();
+      await Promise.all([chargerOperations(), chargerVentilations()]);
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur lors de l’annulation.");
+    } finally {
+      setBusyAnnulation(false);
+    }
+  }
+
+  async function ouvrirHistorique(op: EncaissementRow) {
+    setActionOpenId(null);
+    setHistoriqueOperation(op);
+    setHistoriqueCorrections([]);
+    setHistoriqueAjustements([]);
+    setBusyHistorique(true);
+    setError(null);
+
+    try {
+      const [{ data: corrections, error: errC }, { data: ajustements, error: errA }] =
+        await Promise.all([
+          supabase
+            .from("v_encaissements_corrections")
+            .select("*")
+            .eq("operation_id", op.operation_id)
+            .order("corrige_le", { ascending: false }),
+          supabase
+            .from("v_encaissements_ajustements")
+            .select("*")
+            .eq("operation_source_id", op.operation_id)
+            .order("cree_le", { ascending: false }),
+        ]);
+
+      if (errC) throw new Error(errC.message);
+      if (errA) throw new Error(errA.message);
+
+      setHistoriqueCorrections((corrections ?? []) as CorrectionHistoriqueRow[]);
+      setHistoriqueAjustements((ajustements ?? []) as AjustementHistoriqueRow[]);
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur de chargement de l’historique.");
+    } finally {
+      setBusyHistorique(false);
+    }
+  }
+
+  function fermerHistorique() {
+    setHistoriqueOperation(null);
+    setHistoriqueCorrections([]);
+    setHistoriqueAjustements([]);
+    setBusyHistorique(false);
+  }
+
+  function ouvrirAnnulationCorrection(correction: CorrectionHistoriqueRow) {
+    setCorrectionAAnnuler(correction);
+    setMotifAnnulationCorrection("");
+    setError(null);
+    setMessage(null);
+  }
+
+  function fermerAnnulationCorrection() {
+    setCorrectionAAnnuler(null);
+    setMotifAnnulationCorrection("");
+    setBusyAnnulationCorrection(false);
+  }
+
+  function resetFiltres() {
+    setSelectedMoisId("");
+    setSelectedPersonKey("");
+  }
+
+  return (
+    <AppShell>
+      <div className="space-y-6 p-6">
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.28)]">
+          <p className="text-sm uppercase tracking-[0.22em] text-cyan-300/70">
+            Historique encaissements
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">
+            Corrections, annulations et ajustements
+          </h1>
+          <p className="mt-2 text-sm text-slate-300">
+            Filtre par session/mois, par membre, ou les deux. Aucun ordre de sélection n’est imposé.
+          </p>
+        </div>
+
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-5">
+          <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
+            <div>
+              <label className="mb-2 block text-sm text-slate-300">Session / Mois</label>
+              <select
+                value={selectedMoisId}
+                onChange={(e) => setSelectedMoisId(e.target.value)}
+                className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+              >
+                <option value="">Tous les mois</option>
+                {mois.map((m) => (
+                  <option key={m.id} value={String(m.id)}>
+                    {formatMois(m.mois)} - {m.statut}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm text-slate-300">Membre / Préinscrit</label>
+              <select
+                value={selectedPersonKey}
+                onChange={(e) => setSelectedPersonKey(e.target.value)}
+                className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+              >
+                <option value="">Toutes les personnes</option>
+                {personnes.map((p) => (
+                  <option key={getPersonKey(p)} value={getPersonKey(p)}>
+                    {p.nom_complet} - {p.type_personne}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={resetFiltres}
+                className="w-full rounded-2xl border border-cyan-700/40 bg-cyan-500/10 px-5 py-3 font-medium text-cyan-100 hover:bg-cyan-500/20"
+              >
+                Réinitialiser
+              </button>
+            </div>
+          </div>
+
+          {!selectedMoisId && !selectedPersonKey ? (
+            <div className="mt-4 rounded-2xl border border-amber-700/40 bg-amber-500/10 px-4 py-3 text-amber-100">
+              Sélectionne au moins un filtre pour travailler plus confortablement.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-cyan-900/40 bg-[#04112b] p-4">
+            <div className="text-sm text-slate-300">Total encaissé</div>
+            <div className="mt-2 text-2xl font-semibold text-white">{euro(summary.encaisse)}</div>
+          </div>
+
+          <div className="rounded-2xl border border-cyan-900/40 bg-[#04112b] p-4">
+            <div className="text-sm text-slate-300">Total corrigé</div>
+            <div className="mt-2 text-2xl font-semibold text-white">{euro(summary.corrige)}</div>
+          </div>
+
+          <div className="rounded-2xl border border-cyan-900/40 bg-[#04112b] p-4">
+            <div className="text-sm text-slate-300">Total annulé</div>
+            <div className="mt-2 text-2xl font-semibold text-white">{euro(summary.annule)}</div>
+          </div>
+        </div>
+
+        {message ? (
+          <div className="rounded-2xl border border-emerald-700/40 bg-emerald-500/10 px-4 py-3 text-emerald-200">
+            {message}
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="rounded-2xl border border-red-900/40 bg-red-950/30 px-4 py-3 text-red-200">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                Encaissements
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-white">
+                Liste filtrée des opérations
+              </h2>
+            </div>
+
+            <span className="rounded-full border border-cyan-800/40 bg-[#081735] px-3 py-1 text-sm text-slate-300">
+              {filteredOperations.length} opération{filteredOperations.length > 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+              Chargement...
+            </div>
+          ) : filteredOperations.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+              Aucun encaissement trouvé avec ces filtres.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] border-separate border-spacing-y-2 text-left text-sm">
+                <thead className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Mois</th>
+                    <th className="px-3 py-2">Membre</th>
+                    <th className="px-3 py-2">Montant</th>
+                    <th className="px-3 py-2">Statut</th>
+                    <th className="px-3 py-2">Caisse</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOperations.map((op) => (
+                    <tr key={op.operation_id} className="rounded-2xl bg-[#081735] text-slate-200">
+                      <td className="rounded-l-2xl px-3 py-3">{formatDate(op.date_paiement)}</td>
+                      <td className="px-3 py-3">{formatMois(op.mois)}</td>
+                      <td className="px-3 py-3">{op.nom_complet ?? "-"}</td>
+                      <td className="px-3 py-3 font-semibold text-white">{euro(op.montant_total)}</td>
+                      <td className="px-3 py-3">{statutBadge(op.statut_operation)}</td>
+                      <td className="px-3 py-3">{caisseBadge(op.statut_caisse)}</td>
+                      <td className="rounded-r-2xl px-3 py-3">
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActionOpenId(actionOpenId === op.operation_id ? null : op.operation_id)
+                            }
+                            className="rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-slate-700"
+                          >
+                            ⋮ Actions
+                          </button>
+
+                          {actionOpenId === op.operation_id ? (
+                            <div className="mt-2 w-56 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-xl">
+                              <button
+                                type="button"
+                                onClick={() => ouvrirCorrection(op)}
+                                disabled={!op.peut_corriger}
+                                className="block w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Corriger montant
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => ouvrirCorrectionRubrique(op)}
+                                disabled={!op.peut_corriger}
+                                className="block w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Corriger rubrique
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => ouvrirAnnulation(op)}
+                                disabled={!op.peut_annuler}
+                                className="block w-full px-4 py-3 text-left text-sm text-red-100 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Annuler
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => ouvrirAjustement(op)}
+                                disabled={op.caisse_ouverte || op.statut_operation === "ANNULE"}
+                                className="block w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Ajuster
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => ouvrirHistorique(op)}
+                                className="block w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700"
+                              >
+                                Historique
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-[28px] border border-cyan-900/40 bg-[#04112b] p-5">
+          <div className="mb-4">
+            <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+              Rubriques
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-white">
+              Détail par ventilation / rubrique
+            </h2>
+          </div>
+
+          {filteredVentilations.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+              Aucune ventilation trouvée.
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredVentilations.map((v) => (
+                <div key={v.ventilation_id} className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm text-cyan-200">{formatMois(v.mois)}</div>
+                      <div className="mt-1 text-lg font-semibold text-white">
+                        {v.rubrique_nom ?? v.rubrique_code ?? "-"}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-300">{v.nom_complet ?? "-"}</div>
+                    </div>
+
+                    <span className="rounded-full border border-cyan-800/40 bg-[#07142f] px-3 py-1 text-xs text-slate-300">
+                      {statutBadge(v.statut_operation)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-800 bg-[#07142f] p-3">
+                    <span className="text-sm text-slate-300">Montant rubrique</span>
+                    <span className="font-semibold text-white">{euro(v.montant_rubrique)}</span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {v.peut_corriger_rubrique ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const op = operations.find((op) => op.operation_id === v.operation_id);
+                          if (!op) {
+                            setError("Opération introuvable pour cette rubrique.");
+                            return;
+                          }
+                          ouvrirCorrectionRubrique(op);
+                          setRubriqueVentilationId(String(v.ventilation_id));
+                          setRubriqueMontant(String(v.montant_rubrique ?? ""));
+                        }}
+                        className="rounded-xl border border-cyan-700/40 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-100 hover:bg-cyan-500/20"
+                      >
+                        Corriger rubrique
+                      </button>
+                    ) : (
+                      <span className="rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs text-slate-300">
+                        Correction directe indisponible
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {correctionAAnnuler ? (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+            <div className="w-full max-w-xl rounded-[28px] border border-red-900/50 bg-[#04112b] p-6 shadow-2xl">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-red-300/80">
+                  Annulation de correction
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  Annuler cette correction
+                </h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  Une contre-correction sera créée à l’étape suivante. Pour l’instant, cette modale teste seulement l’ouverture/fermeture.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-red-900/40 bg-[#081735] p-4 text-sm text-slate-300">
+                <div>Type : <span className="text-white">{correctionAAnnuler.type_correction}</span></div>
+                <div>Rubrique : <span className="text-white">{correctionAAnnuler.rubrique_nom ?? correctionAAnnuler.rubrique_code ?? "-"}</span></div>
+                <div>Avant : <span className="text-white">{euro(correctionAAnnuler.ancien_montant)}</span></div>
+                <div>Après : <span className="text-white">{euro(correctionAAnnuler.nouveau_montant)}</span></div>
+              </div>
+
+              <div className="mt-4">
+                <label className="mb-2 block text-sm text-slate-300">Motif obligatoire</label>
+                <textarea
+                  value={motifAnnulationCorrection}
+                  onChange={(e) => setMotifAnnulationCorrection(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-2xl border border-red-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                  placeholder="Exemple : correction faite par erreur"
+                />
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={fermerAnnulationCorrection}
+                  disabled={busyAnnulationCorrection}
+                  className="rounded-2xl border border-slate-700 bg-slate-800 px-5 py-3 font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                >
+                  Fermer
+                </button>
+
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-2xl bg-red-600 px-5 py-3 font-medium text-white opacity-50"
+                >
+                  Confirmer bientôt
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {historiqueOperation ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-700 bg-[#04112b] p-6 shadow-2xl">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                    Historique audit
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">
+                    Historique de l’encaissement
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Corrections, annulations et ajustements liés à cette opération.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fermerHistorique}
+                  className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white hover:bg-slate-700"
+                >
+                  Fermer
+                </button>
+              </div>
+
+              <div className="mb-5 rounded-2xl border border-cyan-900/40 bg-[#081735] p-4 text-sm text-slate-300">
+                <div>Membre : <span className="text-white">{historiqueOperation.nom_complet ?? "-"}</span></div>
+                <div>Date : <span className="text-white">{formatDate(historiqueOperation.date_paiement)}</span></div>
+                <div>Montant : <span className="font-semibold text-white">{euro(historiqueOperation.montant_total)}</span></div>
+                <div>Statut : <span className="text-white">{statutBadge(historiqueOperation.statut_operation)}</span></div>
+                <div>Caisse : <span className="text-white">{caisseBadge(historiqueOperation.statut_caisse)}</span></div>
+              </div>
+
+              {busyHistorique ? (
+                <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-6 text-slate-300">
+                  Chargement historique...
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="mb-3 text-lg font-semibold text-white">
+                      Corrections / Annulations
+                    </h3>
+
+                    {historiqueCorrections.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-4 text-slate-300">
+                        Aucune correction ou annulation.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {historiqueCorrections.map((c) => (
+                          <div key={c.correction_id} className="rounded-2xl border border-slate-800 bg-[#081735] p-4 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {(() => {
+                                  const badge = correctionAuditBadge(c);
+                                  return (
+                                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.className}`}>
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
+                                <span className="text-xs text-slate-400">{c.type_correction}</span>
+                              </div>
+                              <div className="text-slate-400">{formatDate(c.corrige_le)}</div>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 md:grid-cols-3">
+                              <div>
+                                <div className="text-slate-400">Utilisateur</div>
+                                <div className="text-slate-100">{c.corrige_par_nom ?? "Utilisateur inconnu"}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400">Rubrique</div>
+                                <div className="text-slate-100">{c.rubrique_nom ?? c.rubrique_code ?? "-"}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400">Motif</div>
+                                <div className="text-slate-100">{c.motif ?? "-"}</div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                              <div className="rounded-xl border border-slate-700 bg-[#07142f] p-3">
+                                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Avant</div>
+                                <div className="mt-1 text-white">
+                                  Total : {euro(c.ancien_montant)}
+                                  {c.ancien_montant_rubrique !== null ? ` / Rubrique : ${euro(c.ancien_montant_rubrique)}` : ""}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border border-slate-700 bg-[#07142f] p-3">
+                                <div className="text-xs uppercase tracking-[0.14em] text-slate-400">Après</div>
+                                <div className="mt-1 text-white">
+                                  Total : {euro(c.nouveau_montant)}
+                                  {c.nouveau_montant_rubrique !== null ? ` / Rubrique : ${euro(c.nouveau_montant_rubrique)}` : ""}
+                                </div>
+                              </div>
+                            </div>
+
+                            {c.peut_demander_annulation && !c.est_annulee && !c.correction_parent_id ? (
+                              <div className="mt-3 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ouvrirAnnulationCorrection(c)}
+                                  className="rounded-xl border border-red-700/40 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-100 hover:bg-red-500/20"
+                                >
+                                  Annuler cette correction
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="mb-3 text-lg font-semibold text-white">
+                      Ajustements
+                    </h3>
+
+                    {historiqueAjustements.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-800 bg-[#081735] px-4 py-4 text-slate-300">
+                        Aucun ajustement.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {historiqueAjustements.map((a) => (
+                          <div key={a.ajustement_id} className="rounded-2xl border border-amber-900/40 bg-[#081735] p-4 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {(() => {
+                                  const badge = ajustementAuditBadge(a);
+                                  return (
+                                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.className}`}>
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
+                                <span className="text-xs text-slate-400">{a.type_ajustement}</span>
+                              </div>
+                              <div className="text-slate-400">{formatDate(a.cree_le)}</div>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 md:grid-cols-3">
+                              <div>
+                                <div className="text-slate-400">Mois source</div>
+                                <div className="text-slate-100">{formatMois(a.mois_source)}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400">Mois ajustement</div>
+                                <div className="text-slate-100">{formatMois(a.mois_ajustement)}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400">Utilisateur</div>
+                                <div className="text-slate-100">{a.cree_par_nom ?? "Utilisateur inconnu"}</div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 md:grid-cols-3">
+                              <div>
+                                <div className="text-slate-400">Rubrique source</div>
+                                <div className="text-slate-100">{a.rubrique_source ?? "-"}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400">Rubrique destination</div>
+                                <div className="text-slate-100">{a.rubrique_destination ?? "-"}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400">Impact</div>
+                                <div className="font-semibold text-white">{euro(a.impact_net)}</div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 rounded-xl border border-slate-700 bg-[#07142f] p-3">
+                              <div className="text-slate-400">Motif</div>
+                              <div className="mt-1 text-slate-100">{a.motif ?? "-"}</div>
+                            </div>
+
+                            {c.peut_demander_annulation && !c.est_annulee && !c.correction_parent_id ? (
+                              <div className="mt-3 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ouvrirAnnulationCorrection(c)}
+                                  className="rounded-xl border border-red-700/40 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-100 hover:bg-red-500/20"
+                                >
+                                  Annuler cette correction
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {annulationOperation ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-xl rounded-[28px] border border-red-900/50 bg-[#04112b] p-6 shadow-2xl">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-red-300/80">
+                  Annulation encaissement
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  Annuler cet encaissement
+                </h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  L’annulation sera historisée. Le montant historique reste conservé, mais l’opération sera exclue des totaux.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-red-900/40 bg-[#081735] p-4 text-sm text-slate-300">
+                  <div>Membre : <span className="text-white">{annulationOperation.nom_complet ?? "-"}</span></div>
+                  <div>Date : <span className="text-white">{formatDate(annulationOperation.date_paiement)}</span></div>
+                  <div>Montant : <span className="font-semibold text-white">{euro(annulationOperation.montant_total)}</span></div>
+                  <div>Statut : <span className="text-white">{statutBadge(annulationOperation.statut_operation)}</span></div>
+                  <div>Caisse : <span className="text-white">{caisseBadge(annulationOperation.statut_caisse)}</span></div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Motif obligatoire</label>
+                  <textarea
+                    value={annulationMotif}
+                    onChange={(e) => setAnnulationMotif(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl border border-red-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    placeholder="Exemple : encaissement saisi par erreur"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={fermerAnnulation}
+                  disabled={busyAnnulation}
+                  className="rounded-2xl border border-slate-700 bg-slate-800 px-5 py-3 font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                >
+                  Fermer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={validerAnnulation}
+                  disabled={busyAnnulation}
+                  className="rounded-2xl bg-red-600 px-5 py-3 font-medium text-white hover:bg-red-500 disabled:opacity-60"
+                >
+                  {busyAnnulation ? "Annulation..." : "Confirmer annulation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {rubriqueOperation ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-2xl rounded-[28px] border border-cyan-900/50 bg-[#04112b] p-6 shadow-2xl">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                  Correction rubrique
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  Corriger une rubrique
+                </h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  La correction modifie la ventilation sélectionnée et recalcule le total de l’opération.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4 text-sm text-slate-300">
+                  <div>Membre : <span className="text-white">{rubriqueOperation.nom_complet ?? "-"}</span></div>
+                  <div>Date : <span className="text-white">{formatDate(rubriqueOperation.date_paiement)}</span></div>
+                  <div>Total opération : <span className="font-semibold text-white">{euro(rubriqueOperation.montant_total)}</span></div>
+                  <div>Statut : <span className="text-white">{statutBadge(rubriqueOperation.statut_operation)}</span></div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Rubrique à corriger</label>
+                  <select
+                    value={rubriqueVentilationId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const vent = operationVentilations.find((v) => String(v.ventilation_id) === id);
+                      setRubriqueVentilationId(id);
+                      setRubriqueMontant(String(vent?.montant_rubrique ?? ""));
+                    }}
+                    className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                  >
+                    {operationVentilations.map((v) => (
+                      <option key={v.ventilation_id} value={String(v.ventilation_id)}>
+                        {(v.rubrique_nom ?? v.rubrique_code ?? "Rubrique")} - {euro(v.montant_rubrique)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Nouveau montant rubrique</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={rubriqueMontant}
+                    onChange={(e) => setRubriqueMontant(e.target.value)}
+                    className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Motif obligatoire</label>
+                  <textarea
+                    value={rubriqueMotif}
+                    onChange={(e) => setRubriqueMotif(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    placeholder="Exemple : erreur d'affectation ou montant de rubrique incorrect"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={fermerCorrectionRubrique}
+                  disabled={busyRubrique}
+                  className="rounded-2xl border border-slate-700 bg-slate-800 px-5 py-3 font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="button"
+                  onClick={validerCorrectionRubrique}
+                  disabled={busyRubrique}
+                  className="rounded-2xl bg-cyan-600 px-5 py-3 font-medium text-white hover:bg-cyan-500 disabled:opacity-60"
+                >
+                  {busyRubrique ? "Correction..." : "Valider correction rubrique"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {ajustementOperation ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-2xl rounded-[28px] border border-amber-900/50 bg-[#04112b] p-6 shadow-2xl">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-amber-300/80">
+                  Ajustement caisse clôturée
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  Créer un ajustement
+                </h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  L’écriture sera enregistrée dans une caisse ouverte, mais rattachée au mois source clôturé.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-amber-900/40 bg-[#081735] p-4 text-sm text-slate-300">
+                  <div>Mois source : <span className="text-white">{formatMois(ajustementOperation.mois)}</span></div>
+                  <div>Membre : <span className="text-white">{ajustementOperation.nom_complet ?? "-"}</span></div>
+                  <div>Montant opération : <span className="font-semibold text-white">{euro(ajustementOperation.montant_total)}</span></div>
+                  <div>Statut : <span className="text-white">{statutBadge(ajustementOperation.statut_operation)}</span></div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm text-slate-300">Type ajustement</label>
+                    <select
+                      value={ajustementType}
+                      onChange={(e) => setAjustementType(e.target.value as any)}
+                      className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    >
+                      <option value="RETRAIT_MONTANT">Retrait montant</option>
+                      <option value="AJOUT_MONTANT">Ajout montant</option>
+                      <option value="TRANSFERT_RUBRIQUE">Transfert rubrique</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm text-slate-300">Montant</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={ajustementMontant}
+                      onChange={(e) => setAjustementMontant(e.target.value)}
+                      className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm text-slate-300">Rubrique source</label>
+                    <select
+                      value={ajustementRubriqueSource}
+                      onChange={(e) => setAjustementRubriqueSource(e.target.value)}
+                      className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    >
+                      <option value="">Sélectionner</option>
+                      {rubriques.map((r) => (
+                        <option key={String(r.id ?? r.code ?? r.nom)} value={r.code ?? r.nom}>
+                          {r.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {ajustementType === "TRANSFERT_RUBRIQUE" ? (
+                    <div>
+                      <label className="mb-2 block text-sm text-slate-300">Rubrique destination</label>
+                      <select
+                        value={ajustementRubriqueDestination}
+                        onChange={(e) => setAjustementRubriqueDestination(e.target.value)}
+                        className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                      >
+                        <option value="">Sélectionner</option>
+                        {rubriques.map((r) => (
+                          <option key={String(r.id ?? r.code ?? r.nom)} value={r.code ?? r.nom}>
+                            {r.nom}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Motif obligatoire</label>
+                  <textarea
+                    value={ajustementMotif}
+                    onChange={(e) => setAjustementMotif(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    placeholder="Exemple : correction d'une erreur constatée après clôture"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={fermerAjustement}
+                  disabled={busyAjustement}
+                  className="rounded-2xl border border-slate-700 bg-slate-800 px-5 py-3 font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="button"
+                  onClick={validerAjustement}
+                  disabled={busyAjustement}
+                  className="rounded-2xl bg-amber-600 px-5 py-3 font-medium text-white hover:bg-amber-500 disabled:opacity-60"
+                >
+                  {busyAjustement ? "Ajustement..." : "Créer ajustement"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {correctionOperation ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-xl rounded-[28px] border border-cyan-900/50 bg-[#04112b] p-6 shadow-2xl">
+              <div className="mb-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/80">
+                  Correction encaissement
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  Corriger le montant
+                </h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  La correction sera historisée avec le motif saisi.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-cyan-900/40 bg-[#081735] p-4 text-sm text-slate-300">
+                  <div>Membre : <span className="text-white">{correctionOperation.nom_complet ?? "-"}</span></div>
+                  <div>Date : <span className="text-white">{formatDate(correctionOperation.date_paiement)}</span></div>
+                  <div>Montant actuel : <span className="font-semibold text-white">{euro(correctionOperation.montant_total)}</span></div>
+                  <div>Statut : <span className="text-white">{statutBadge(correctionOperation.statut_operation)}</span></div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Nouveau montant</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={correctionMontant}
+                    onChange={(e) => setCorrectionMontant(e.target.value)}
+                    className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-300">Motif obligatoire</label>
+                  <textarea
+                    value={correctionMotif}
+                    onChange={(e) => setCorrectionMotif(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl border border-cyan-800/40 bg-[#081735] px-4 py-3 text-white outline-none"
+                    placeholder="Exemple : erreur de saisie du montant"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={fermerCorrection}
+                  disabled={busyCorrection}
+                  className="rounded-2xl border border-slate-700 bg-slate-800 px-5 py-3 font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="button"
+                  onClick={validerCorrectionMontant}
+                  disabled={busyCorrection}
+                  className="rounded-2xl bg-emerald-600 px-5 py-3 font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
+                >
+                  {busyCorrection ? "Correction..." : "Valider correction"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </AppShell>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

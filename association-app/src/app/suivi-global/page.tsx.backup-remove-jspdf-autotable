@@ -93,12 +93,19 @@ Merci.`;
   return `https://wa.me/${numero}?text=${encodeURIComponent(message)}`;
 }
 
+async function loadPdfLibs() {
+  const jsPDFModule = await import("jspdf");
+  await import("jspdf-autotable");
+
+  return jsPDFModule.default;
+}
+
 export default function SuiviGlobalPage() {
   async function handleSavePdf() {
     try {
       setSavingPdf(true);
 
-      const jspdfModule = await import("jspdf/dist/jspdf.umd.min.js");
+      const jspdfModule = await import("jspdf");
       const jsPDF = (jspdfModule as any).jsPDF;
 
       const pdf = new jsPDF("p", "mm", "a4");
