@@ -74,8 +74,7 @@ type OperationSection = {
 
 type DashboardGlobal = {
   solde_global_caisses: number | string | null;
-  total_encaisse_session?: number | string | null;
-  session_libelle?: string | null;
+  solde_caisse_association?: number | string | null;
   nb_prets_en_cours: number | string | null;
   reste_global: number | string | null;
 };
@@ -262,11 +261,8 @@ export default async function PageAccueil() {
   ] = await Promise.all([
     canManage
       ? supabase
-          .from("v_synthese_caisse_session_globale")
-          .select("total_encaisse_session, session_libelle")
-          .order("annee", { ascending: false })
-          .order("mois", { ascending: false })
-          .limit(1)
+          .from("v_kpi_solde_caisse_association")
+          .select("solde_caisse_association")
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     canManage
@@ -297,8 +293,7 @@ export default async function PageAccueil() {
   const retards = (retardsResult.data || []) as RetardRow[];
   const notifications = notificationsResult.data as NotificationCount | null;
 
-  const soldeGlobal = Number(dashboardGlobal?.total_encaisse_session || 0);
-  const sessionLibelle = dashboardGlobal?.session_libelle || "session en cours";
+  const soldeGlobal = Number(dashboardGlobal?.solde_caisse_association || 0);
   const encaissementsMois = Number(encaissementMois?.solde_corrige || 0);
   const nbMembres = membresCountResult.count || 0;
   const nbRetards = new Set(
