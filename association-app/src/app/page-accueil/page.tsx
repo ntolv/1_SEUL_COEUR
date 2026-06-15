@@ -74,6 +74,8 @@ type OperationSection = {
 
 type DashboardGlobal = {
   solde_global_caisses: number | string | null;
+  total_encaisse_session?: number | string | null;
+  session_libelle?: string | null;
   nb_prets_en_cours: number | string | null;
   reste_global: number | string | null;
 };
@@ -85,6 +87,7 @@ type EncaissementMois = {
 };
 
 type RetardRow = {
+  personne_id: string | null;
   reste: number | string | null;
 };
 
@@ -94,8 +97,10 @@ type NotificationCount = {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", {
-    maximumFractionDigits: 0,
-  }).format(value) + " FCFA";
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function formatNumber(value: number) {
@@ -256,7 +261,13 @@ export default async function PageAccueil() {
     notificationsResult,
   ] = await Promise.all([
     canManage
-      ? supabase.from("vw_dashboard_global_admin").select("*").limit(1).maybeSingle()
+      ? supabase
+          .from("v_synthese_caisse_session_globale")
+          .select("total_encaisse_session, session_libelle")
+          .order("annee", { ascending: false })
+          .order("mois", { ascending: false })
+          .limit(1)
+          .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     canManage
       ? supabase
@@ -270,7 +281,10 @@ export default async function PageAccueil() {
       .from("v_personnes_uniques")
       .select("id", { count: "exact", head: true }),
     canManage
-      ? supabase.from("v_retards").select("reste")
+      ? supabase
+          .from("v_encaissements_suivi_global")
+          .select("personne_id, reste")
+          .gt("reste", 0)
       : Promise.resolve({ data: [], error: null }),
     supabase
       .from("v_notifications_non_lues_count")
@@ -283,10 +297,16 @@ export default async function PageAccueil() {
   const retards = (retardsResult.data || []) as RetardRow[];
   const notifications = notificationsResult.data as NotificationCount | null;
 
-  const soldeGlobal = Number(dashboardGlobal?.solde_global_caisses || 0);
+  const soldeGlobal = Number(dashboardGlobal?.total_encaisse_session || 0);
+  const sessionLibelle = dashboardGlobal?.session_libelle || "session en cours";
   const encaissementsMois = Number(encaissementMois?.solde_corrige || 0);
   const nbMembres = membresCountResult.count || 0;
-  const nbRetards = retards.length;
+  const nbRetards = new Set(
+    retards
+      .map((retard) => retard.personne_id)
+      .filter(Boolean)
+  ).size;
+
   const montantRetards = retards.reduce(
     (total, retard) => total + Number(retard.reste || 0),
     0
@@ -604,9 +624,9 @@ export default async function PageAccueil() {
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {canManage && (
             <KpiCard
-              titre="Solde global association"
+              titre="Solde caisse association"
               valeur={formatCurrency(soldeGlobal)}
-              description="Solde consolidé des caisses disponibles."
+              description="Solde réel des caisses de l'association."
               icone="caisse"
               href="/suivi-global"
             />
@@ -618,7 +638,7 @@ export default async function PageAccueil() {
               valeur={formatCurrency(encaissementsMois)}
               description={`Mois en cours : ${encaissementMois?.statut || "non défini"}.`}
               icone="encaissement"
-              href="/encaissements/historique"
+              href="/suivi-caisse-session"
             />
           )}
 
@@ -699,7 +719,7 @@ export default async function PageAccueil() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
                 <Link
-                  href="/encaissements/historique"
+                  href="/suivi-caisse-session"
                   className="rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-400/10"
                 >
                   Historique encaissements
